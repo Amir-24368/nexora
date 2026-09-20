@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+/staticfiles/
+/media/
+*.log
+
+# Environment / secrets
+.env
+.env.*
+
+# Node / Flutter build output
+build/
+.dart_tool/
+*.iml
+.idea/
+.vscode/
+
+# Flutter ephemeral
+*.g.dart
+.flutter-plugins
+.flutter-plugins-dependencies
