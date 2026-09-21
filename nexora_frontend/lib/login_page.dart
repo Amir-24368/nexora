@@ -16,6 +16,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _captchaInputController = TextEditingController();
+  final TextEditingController _serverController = TextEditingController();
 
   String _captchaText = '';
   bool _obscurePassword = true;
@@ -24,6 +25,54 @@ class _LoginPageState extends State<LoginPage> {
   void initState() {
     super.initState();
     _generateCaptcha();
+    _loadServerUrl();
+  }
+
+  Future<void> _loadServerUrl() async {
+    final url = await ApiService.getServerUrl();
+    if (mounted) {
+      setState(() => _serverController.text = url ?? ApiService.baseUrl);
+    }
+  }
+
+  /// Lets the hosted web build (GitHub Pages) point at any running backend
+  /// without a rebuild. Saved so it sticks across reloads.
+  Future<void> _editServer() async {
+    final controller = TextEditingController(text: _serverController.text);
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('API server'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'API base URL',
+                hintText: 'http://192.168.1.20:8000/api',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Must end with /api and be reachable from this device (CORS enabled on the server).',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (saved == null) return; // cancelled
+    await ApiService.setServerUrl(saved);
+    if (mounted) {
+      setState(() => _serverController.text = ApiService.baseUrl);
+      _showSnackBar('Server saved: ${ApiService.baseUrl}', isError: false);
+    }
   }
 
   void _generateCaptcha() {
@@ -146,6 +195,25 @@ class _LoginPageState extends State<LoginPage> {
                       style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
                     ),
                     const SizedBox(height: 32),
+                    InkWell(
+                      onTap: _editServer,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'Server (tap to change)',
+                          prefixIcon: Icon(Icons.dns, color: Colors.blue.shade700),
+                          suffixIcon: Icon(Icons.edit, size: 18, color: Colors.grey.shade600),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text(
+                          _serverController.text,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     TextField(
                       controller: _emailController,
                       decoration: InputDecoration(

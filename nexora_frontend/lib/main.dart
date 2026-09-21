@@ -38,6 +38,7 @@ class _SplashScreenState extends State<SplashScreen> {
   /// wiped first, so a stale token can never drop the user straight into a
   /// dashboard before they have logged in.
   Future<void> _bootstrap() async {
+    await ApiService.loadSavedServerUrl();
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
 

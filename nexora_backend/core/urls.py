@@ -1,9 +1,18 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
 from django.conf import settings
 from django.conf.urls.static import static
 
+
+def health(request):
+    """Root endpoint so visiting the server in a browser shows a friendly
+    confirmation instead of a 404 -- also handy for uptime pings."""
+    return JsonResponse({"status": "ok", "service": "Nexora API", "endpoints": ["/admin/", "/api/"]})
+
+
 urlpatterns = [
+    path("", health),
     path("admin/", admin.site.urls),
     path("api/auth/", include("users.api.urls")),
     path("api/", include("products.api.urls")),

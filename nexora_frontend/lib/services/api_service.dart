@@ -10,14 +10,48 @@ import '../models/purchase_order.dart';
 import '../models/shop.dart';
 
 class ApiService {
-  // Base URL is compile-time configurable so the same code targets a local
-  // dev server or a public deployment:
-  //   flutter run --dart-define=API_BASE_URL=https://your-server.com/api
-  // Defaults to the local Django dev server.
-  static const String baseUrl = String.fromEnvironment(
+  // Base URL resolution order:
+  //   1. Compile-time:  flutter run --dart-define=API_BASE_URL=https://x/api
+  //   2. Runtime:       the ⚙ server button on the login page (saved to
+  //                     SharedPreferences) -- so the GitHub Pages web build
+  //                     can be pointed at any running backend without a
+  //                     rebuild.
+  //   3. Fallback:      the local Django dev server.
+  static const String _defaultBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'http://127.0.0.1:8000/api',
   );
+
+  static String? _overrideBaseUrl;
+
+  static String get baseUrl => _overrideBaseUrl ?? _defaultBaseUrl;
+
+  /// Point the app at a different backend at runtime. Pass null to reset to
+  /// the compile-time default.
+  static Future<void> setServerUrl(String? url) async {
+    _overrideBaseUrl = (url == null || url.trim().isEmpty) ? null : url.trim();
+    final prefs = await SharedPreferences.getInstance();
+    if (_overrideBaseUrl == null) {
+      await prefs.remove('server_base_url');
+    } else {
+      await prefs.setString('server_base_url', _overrideBaseUrl!);
+    }
+  }
+
+  /// The URL chosen at runtime, or null when the compile-time default is in
+  /// use (used by the login page's server picker to pre-fill its field).
+  static Future<String?> getServerUrl() async {
+    if (_overrideBaseUrl != null) return _overrideBaseUrl;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('server_base_url');
+  }
+
+  /// Load any saved runtime override -- call once at app startup.
+  static Future<void> loadSavedServerUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('server_base_url');
+    _overrideBaseUrl = (saved == null || saved.isEmpty) ? null : saved;
+  }
 
   // ============================================================
   // AUTHENTICATION
