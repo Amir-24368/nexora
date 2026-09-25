@@ -72,13 +72,30 @@ class ApiService {
       await prefs.setString('user', jsonEncode(data['user'] ?? {}));
       return data;
     } else {
+      // Surface the backend's real message; fall back to a status-code hint
+      // (e.g. 301 => the URL is redirecting, usually a misconfigured base).
+      String msg;
       try {
         final errorData = jsonDecode(response.body);
-        final msg = errorData['detail'] ?? errorData['message'] ?? 'Login failed';
-        throw Exception(msg);
+        final errors = errorData['errors'];
+        if (errors is Map && errors['non_field_errors'] is List && (errors['non_field_errors'] as List).isNotEmpty) {
+          msg = errors['non_field_errors'][0].toString();
+        } else if (errorData['detail'] is String) {
+          msg = errorData['detail'];
+        } else {
+          msg = 'Login failed';
+        }
       } catch (_) {
-        throw Exception('Login failed: ${response.statusCode}');
+        msg = switch (response.statusCode) {
+          301 || 302 || 307 || 308 => 'Server redirected the request -- check the Server URL (it must end with /api)',
+          400 => 'Invalid request',
+          401 || 403 => 'Invalid email or password',
+          404 => 'Server endpoint not found -- the Server URL must end with /api',
+          500 => 'Server error -- try again later',
+          _ => 'Login failed (code ${response.statusCode})',
+        };
       }
+      throw Exception(msg);
     }
   }
 

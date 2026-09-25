@@ -50,7 +50,11 @@ class _LoginPageState extends State<LoginPage> {
     if (!path.endsWith('/api')) {
       path = path.isEmpty ? '/api' : '$path/api';
     }
-    return uri.replace(path: path, query: '', fragment: '').toString();
+    // Rebuild as a plain string: Uri.replace() renders empty query/fragment
+    // markers ('?#' / '#') into the URL, which silently break path appending
+    // (e.g. 'host/api?#/auth/login/' hits the wrong endpoint).
+    final port = uri.hasPort ? ':${uri.port}' : '';
+    return '${uri.scheme}://${uri.host}$port$path';
   }
 
   Future<void> _loadServerUrl() async {
