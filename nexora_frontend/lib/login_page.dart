@@ -28,10 +28,41 @@ class _LoginPageState extends State<LoginPage> {
     _loadServerUrl();
   }
 
+  /// Accepts `host`, `host:8000`, `http(s)://host[:port][/anything]` and
+  /// returns a URL ApiService can use as-is: scheme + host + `/api`.
+  /// Applied on load too, so old saved values (e.g. missing `/api`)
+  /// heal themselves without the user touching anything.
+  String _normalizeServerUrl(String raw) {
+    var url = raw.trim();
+    if (url.isEmpty) return url;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      // Local/LAN addresses usually serve plain http; public hosts get https.
+      final looksLocal = RegExp(r'^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)').hasMatch(url);
+      url = '${looksLocal ? 'http' : 'https'}://$url';
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.host.isEmpty) return url;
+    var path = uri.path;
+    while (path.endsWith('/')) {
+      path = path.substring(0, path.length - 1);
+    }
+    // The base must end with exactly one '/api' -- append it unless already there.
+    if (!path.endsWith('/api')) {
+      path = path.isEmpty ? '/api' : '$path/api';
+    }
+    return uri.replace(path: path, query: '', fragment: '').toString();
+  }
+
   Future<void> _loadServerUrl() async {
     final url = await ApiService.getServerUrl();
+    final normalized = _normalizeServerUrl(url ?? ApiService.baseUrl);
+    // Self-heal: an old saved value without /api (or otherwise malformed)
+    // is persisted in fixed form so the app actually uses it.
+    if (url != null && normalized != url) {
+      await ApiService.setServerUrl(normalized);
+    }
     if (mounted) {
-      setState(() => _serverController.text = url ?? ApiService.baseUrl);
+      setState(() => _serverController.text = normalized);
     }
   }
 
@@ -56,7 +87,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Must end with /api and be reachable from this device (CORS enabled on the server).',
+              'Just the host also works (e.g. my-api.onrender.com) -- /api is added automatically. Server must allow CORS from this app.',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
           ],
@@ -68,7 +99,8 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
     if (saved == null) return; // cancelled
-    await ApiService.setServerUrl(saved);
+    final normalized = _normalizeServerUrl(saved);
+    await ApiService.setServerUrl(normalized);
     if (mounted) {
       setState(() => _serverController.text = ApiService.baseUrl);
       _showSnackBar('Server saved: ${ApiService.baseUrl}', isError: false);

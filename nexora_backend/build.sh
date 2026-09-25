@@ -22,6 +22,8 @@ django.setup()
 
 from django.contrib.auth import get_user_model
 
+from shops.models import Shop
+
 User = get_user_model()
 if not User.objects.filter(is_superuser=True).exists():
     User.objects.create_superuser(
@@ -32,4 +34,17 @@ if not User.objects.filter(is_superuser=True).exists():
     print('Superuser created.')
 else:
     print('Superuser already exists.')
+
+# Heal any shopless superuser: dashboards and every shop-scoped API are
+# keyed on user.shop, so a superuser without one logs into an empty app.
+# Promote them to OWNER and attach (or create) their shop automatically.
+for su in User.objects.filter(is_superuser=True, shop__isnull=True):
+    shop = Shop.objects.filter(owner=su).first() or Shop.objects.first()
+    if shop is None:
+        shop = Shop.objects.create(name=f"{su.username or su.email}'s Shop", owner=su)
+        print(f'Shop "{shop.name}" created for {su.email}.')
+    su.role = 'OWNER'
+    su.shop = shop
+    su.save(update_fields=['role', 'shop'])
+    print(f'Promoted {su.email} to OWNER of "{shop.name}".')
 EOF
