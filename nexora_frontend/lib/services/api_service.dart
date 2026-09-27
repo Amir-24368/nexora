@@ -66,8 +66,19 @@ class ApiService {
     if (response.statusCode == 200) {
       final jsonData = jsonDecode(response.body);
       final data = jsonData['data'] ?? jsonData;
+      // A 200 without tokens means we reached *a* server but not the Nexora
+      // API (e.g. a health-check or API-root JSON from a wrong base URL).
+      // Reject it loudly instead of "logging in" with empty credentials and
+      // showing silently-empty lists afterwards.
+      final access = data['access'];
+      if (access is! String || access.isEmpty) {
+        throw Exception(
+          'That server responded, but it is not the Nexora API. '
+          'Check the Server URL -- it must end with /api',
+        );
+      }
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('access_token', data['access'] ?? '');
+      await prefs.setString('access_token', access);
       await prefs.setString('refresh_token', data['refresh'] ?? '');
       await prefs.setString('user', jsonEncode(data['user'] ?? {}));
       return data;
