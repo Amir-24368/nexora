@@ -6,7 +6,12 @@ from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser
 from typing import cast
-from .serializers import RegisterSerializer, LoginSerializer, UserSerializer
+from .serializers import (
+    RegisterSerializer,
+    LoginSerializer,
+    StaffCreateSerializer,
+    UserSerializer,
+)
 
 User = get_user_model()
 
@@ -72,6 +77,31 @@ class LogoutView(APIView):
             return Response({'status': 'success', 'message': 'Logged out successfully'})
         except Exception:
             return Response({'status': 'error'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class StaffCreateView(APIView):
+    """Add a user to an existing shop (OWNER/MANAGER/superuser only).
+
+    POST /api/auth/staff/create/
+    Body: {email, password, full_name, phone?, role?, shop? (superuser only)}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = StaffCreateSerializer(
+            data=request.data, context={'request': request}
+        )
+        if serializer.is_valid():
+            new_user = serializer.save()
+            return Response(
+                {'status': 'success', 'data': UserSerializer(new_user).data},
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(
+            {'status': 'error', 'errors': serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 class MeView(APIView):

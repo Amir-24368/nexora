@@ -37,6 +37,80 @@ class RegisterSerializer(serializers.Serializer):
         return user
 
 
+class StaffCreateSerializer(serializers.Serializer):
+    """Create a user inside an *existing* shop.
+
+    Used by OWNER/MANAGER accounts (and superusers) to add employees or
+    managers to their own shop -- unlike RegisterSerializer, which always
+    creates a brand-new OWNER with a brand-new shop.
+    """
+
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, min_length=6)
+    full_name = serializers.CharField(max_length=255)
+    phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    role = serializers.ChoiceField(choices=['EMPLOYEE', 'MANAGER', 'OWNER'], default='EMPLOYEE')
+    # Superuser-only: place the new user in a specific shop. Non-superusers
+    # are always placed in their own shop.
+    shop = serializers.IntegerField(required=False)
+
+    def validate_email(self, value):
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError('User with this email already exists.')
+        return value.strip().lower()
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        creator = getattr(request, 'user', None)
+        if creator is None or not creator.is_authenticated:
+            raise serializers.ValidationError('Authentication required.')
+        if not creator.is_superuser:
+            if attrs.get('role') == 'OWNER':
+                raise serializers.ValidationError(
+                    {'role': 'Only a superuser can create an OWNER account.'}
+                )
+            if attrs.get('shop') is not None:
+                raise serializers.ValidationError(
+                    {'shop': 'Only a superuser can assign a shop explicitly.'}
+                )
+            if not getattr(creator, 'shop', None):
+                raise serializers.ValidationError(
+                    {'shop': 'Your account has no shop, so you cannot add users to one.'}
+                )
+        return attrs
+
+    def create(self, validated_data):
+        creator = self.context['request'].user
+        if creator.is_superuser:
+            shop_id = validated_data.pop('shop', None)
+            shop = None
+            if shop_id is not None:
+                shop = Shop.objects.filter(id=shop_id).first()
+                if shop is None:
+                    raise serializers.ValidationError({'shop': 'Shop not found.'})
+            if shop is None:
+                shop = getattr(creator, 'shop', None)
+        else:
+            validated_data.pop('shop', None)
+            shop = creator.shop
+        if shop is None:
+            raise serializers.ValidationError(
+                {'shop': 'No shop to assign the new user to.'}
+            )
+
+        password = validated_data.pop('password')
+        new_user = User.objects.create_user(
+            email=validated_data['email'],
+            password=password,
+            username=validated_data['email'],
+            full_name=validated_data.get('full_name', ''),
+            phone=validated_data.get('phone', ''),
+            role=validated_data.get('role', 'EMPLOYEE'),
+            shop=shop,
+        )
+        return new_user
+
+
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
