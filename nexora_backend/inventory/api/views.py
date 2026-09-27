@@ -26,6 +26,30 @@ class InventoryViewSet(viewsets.ModelViewSet):
             return Inventory.objects.filter(shop=shop)
         return Inventory.objects.none()
 
+    def perform_create(self, serializer):
+        # 'shop' is read-only in the serializer, so without this the POST
+        # would try to save an Inventory row with no shop and crash with a
+        # NOT NULL 500. Assign the creator's shop (superusers may pass one).
+        user = self.request.user
+        if user.is_superuser:
+            data = self.request.data if isinstance(self.request.data, dict) else {}
+            shop_id = data.get('shop')
+            if shop_id:
+                from shops.models import Shop
+                try:
+                    shop = Shop.objects.get(id=shop_id)
+                except Shop.DoesNotExist:
+                    raise ValidationError(f"Shop {shop_id} not found")
+            else:
+                shop = getattr(user, 'shop', None)
+                if not shop:
+                    raise ValidationError("Superuser must provide a shop ID or have a shop assigned.")
+        else:
+            shop = getattr(user, 'shop', None)
+            if not shop:
+                raise ValidationError("User does not have a shop assigned.")
+        serializer.save(shop=shop)
+
     @action(detail=False, methods=['get'])
     def low_stock(self, request):
         """Return products that are below their reorder_point or minimum_stock."""

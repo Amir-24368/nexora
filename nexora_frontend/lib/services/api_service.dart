@@ -298,10 +298,23 @@ class ApiService {
                 value.forEach((subKey, subValue) {
                   errors.add('$key.$subKey: ${subValue is List ? subValue.join(', ') : subValue}');
                 });
+              } else {
+                errors.add('$key: $value');
               }
             });
             if (errors.isNotEmpty) {
               errorMsg = errors.join('; ');
+            }
+          } else if (errorData is List) {
+            // DRF also returns bare lists of messages, e.g.
+            // ["Not enough stock. Available: 0"] -- surface them instead of
+            // dropping the real reason and showing only the status code.
+            final messages = errorData
+                .map((e) => e is Map ? jsonEncode(e) : e.toString())
+                .where((m) => m.isNotEmpty)
+                .toList();
+            if (messages.isNotEmpty) {
+              errorMsg = messages.join('; ');
             }
           } else if (errorData is String) {
             errorMsg = errorData;
