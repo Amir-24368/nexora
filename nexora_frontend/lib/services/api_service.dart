@@ -554,6 +554,16 @@ class ApiService {
     throw Exception('Invalid response format');
   }
 
+  static Future<Map<String, dynamic>> updateSupplier(String id, Map<String, dynamic> data) async {
+    final response = await _request('PUT', '/suppliers/$id/', body: data);
+    if (response is Map<String, dynamic>) return response;
+    throw Exception('Invalid response format');
+  }
+
+  static Future<void> deleteSupplier(String id) async {
+    await _request('DELETE', '/suppliers/$id/');
+  }
+
   // ============================================================
   // PURCHASE ORDERS
   // ============================================================
