@@ -7,6 +7,9 @@ class SupplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
         fields = '__all__'
+        # Shop is resolved server-side (from the user or the payload),
+        # so it must not be a required writable field.
+        read_only_fields = ['shop']
 
 
 class PurchaseOrderLineSerializer(serializers.ModelSerializer):

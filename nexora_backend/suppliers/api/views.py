@@ -34,6 +34,16 @@ class SupplierViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         shop = getattr(user, 'shop', None)
+        if not shop and user.is_superuser:
+            # Superusers may target a specific shop via the payload.
+            data = self.request.data if isinstance(self.request.data, dict) else {}
+            shop_id = data.get('shop')
+            if shop_id:
+                from shops.models import Shop
+                try:
+                    shop = Shop.objects.get(id=shop_id)
+                except Shop.DoesNotExist:
+                    raise ValidationError(f"Shop {shop_id} not found")
         if not shop:
             if user.is_superuser:
                 raise ValidationError("Superuser must pass a 'shop' id in the payload to create a supplier.")
