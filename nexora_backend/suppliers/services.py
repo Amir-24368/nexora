@@ -8,7 +8,7 @@ from suppliers.models import (
     PurchaseOrderLine,
 )
 
-from inventory.models import Inventory
+from inventory.models import Inventory, InventoryMovement
 
 from products.models import Product
 
@@ -50,15 +50,15 @@ def create_purchase_order(
 
         product_id = item.get("product")
 
-        quantity = item.get(
-            "quantity",
-            0
-        )
+        try:
+            quantity = int(item.get("quantity", 0))
+        except (TypeError, ValueError):
+            raise ValidationError("Quantity must be a whole number")
 
-        price = item.get(
-            "purchase_price",
-            0
-        )
+        try:
+            price = Decimal(str(item.get("purchase_price", 0)))
+        except (ArithmeticError, TypeError, ValueError):
+            raise ValidationError("Purchase price must be a number")
 
 
         if quantity <= 0:
@@ -73,9 +73,17 @@ def create_purchase_order(
             )
 
 
-        product = Product.objects.get(
-            id=product_id
-        )
+        # A bare get() crashed with DoesNotExist (a 500) on a bad id;
+        # raise a readable 400 and keep products tenant-scoped.
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            raise ValidationError(f"Product {product_id} not found")
+
+        if product.shop_id != shop.id:
+            raise ValidationError(
+                f"Product '{product.name}' does not belong to this shop"
+            )
 
 
         line = PurchaseOrderLine.objects.create(
@@ -205,6 +213,18 @@ def receive_purchase_order(
         inventory.quantity += quantity_received
 
         inventory.save()
+
+        # Keep the stock ledger consistent with the sale path: every
+        # received unit is an IN movement tied to its purchase order.
+        InventoryMovement.objects.create(
+            shop=purchase_order.shop,
+            product=line.product,
+            change_type="IN",
+            quantity=quantity_received,
+            reference_id=f"PO-{purchase_order.pk}",
+            reference_type="PURCHASE_ORDER",
+            note=f"Received from {purchase_order.supplier.name}",
+        )
 
 
 

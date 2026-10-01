@@ -579,6 +579,45 @@ class ApiService {
     throw Exception('Invalid response format');
   }
 
+  static Future<PurchaseOrder> _poAction(String pathSuffix, {Map<String, dynamic>? body}) async {
+    final response = await _request('POST', pathSuffix, body: body);
+    if (response is Map<String, dynamic>) {
+      return PurchaseOrder.fromJson(response);
+    }
+    throw Exception('Invalid response format');
+  }
+
+  /// Approves a DRAFT purchase order so it can be received.
+  static Future<PurchaseOrder> approvePurchaseOrder(String id) =>
+      _poAction('/purchase-orders/$id/approve/');
+
+  /// Receives goods for a purchase order, which adds the stock to the
+  /// shop's inventory. Payload: [{"line_id": <id>, "quantity": <n>}, ...]
+  static Future<PurchaseOrder> receivePurchaseOrder(String id, List<Map<String, dynamic>> lines) =>
+      _poAction('/purchase-orders/$id/receive/', body: {'lines': lines});
+
+  static Future<PurchaseOrder> cancelPurchaseOrder(String id) =>
+      _poAction('/purchase-orders/$id/cancel/');
+
+  // ============================================================
+  // INVENTORY
+  // ============================================================
+
+  /// Returns raw inventory rows ({product: <id>, quantity: n, ...}) so pages
+  /// can show current stock levels per product.
+  static Future<List<Map<String, dynamic>>> getInventory() async {
+    final response = await _request('GET', '/inventory/');
+    List<dynamic> list;
+    if (response is List) {
+      list = response;
+    } else if (response is Map<String, dynamic>) {
+      list = response['results'] ?? [];
+    } else {
+      list = [];
+    }
+    return list.cast<Map<String, dynamic>>();
+  }
+
   // ============================================================
   // GOODS INFO (placeholder)
   // ============================================================
