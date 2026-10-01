@@ -347,8 +347,8 @@ class ApiService {
   // PRODUCTS
   // ============================================================
 
-  static Future<List<Product>> getProducts() async {
-    final response = await _request('GET', '/products/');
+  static Future<List<Product>> getProducts({String? shopId}) async {
+    final response = await _request('GET', '/products/' + (shopId != null ? '?shop=$shopId' : ''));
     List<dynamic> list;
     if (response is List) {
       list = response;

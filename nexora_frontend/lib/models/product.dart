@@ -56,6 +56,9 @@ class Product {
   // ===== Shop (for multi-tenant) =====
   final Shop? shop;
 
+  /// Raw shop id from the API (used to scope restocking per shop).
+  final String? shopId;
+
   Product({
     required this.id,
     required this.name,
@@ -89,6 +92,7 @@ class Product {
     required this.createdAt,
     required this.updatedAt,
     this.shop,
+    this.shopId,
   });
 
   /// Price after the discount percentage is applied (falls back to salePrice).
@@ -156,8 +160,9 @@ class Product {
       aiTags: json['ai_tags'] ?? {},
       createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
       updatedAt: DateTime.parse(json['updated_at'] ?? DateTime.now().toIso8601String()),
-      shop: json['shop'] != null
-          ? (json['shop'] is Map ? Shop.fromJson(json['shop'] as Map<String, dynamic>) : null)
+      shopId: json['shop']?.toString(),
+      shop: json['shop_detail'] != null && json['shop_detail'] is Map
+          ? Shop.fromJson(json['shop_detail'] as Map<String, dynamic>)
           : null,
     );
   }

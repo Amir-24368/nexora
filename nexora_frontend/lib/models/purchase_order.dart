@@ -40,6 +40,7 @@ class PurchaseOrderLine {
 
 class PurchaseOrder {
   final String id;
+  final String? shopId;
   final String supplierId;
   final String supplierName;
   final String status;
@@ -55,6 +56,7 @@ class PurchaseOrder {
 
   PurchaseOrder({
     required this.id,
+    this.shopId,
     this.supplierId = '',
     this.supplierName = '',
     this.status = 'DRAFT',
@@ -81,6 +83,7 @@ class PurchaseOrder {
     final linesData = json['lines'];
     return PurchaseOrder(
       id: json['id']?.toString() ?? '',
+      shopId: json['shop']?.toString(),
       supplierId: json['supplier']?.toString() ?? '',
       supplierName: supplier is Map<String, dynamic> ? (supplier['name'] ?? '') : '',
       status: json['status'] ?? 'DRAFT',

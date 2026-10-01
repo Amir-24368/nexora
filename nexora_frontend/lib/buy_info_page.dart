@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'models/purchase_order.dart';
 import 'models/product.dart';
+import 'models/shop.dart';
 
 /// A restock line the user is composing before it becomes a purchase order.
 class _RestockItem {
@@ -39,8 +40,10 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
   List<Product> _products = [];
   Map<String, int> _stockByProduct = {};
   List<Map<String, dynamic>> _suppliers = [];
+  List<Shop> _shops = [];
 
   // ---- form state ----
+  String? _selectedShopId;
   String? _selectedSupplierId;
   String? _selectedProductId;
   final _quantityController = TextEditingController();
@@ -75,6 +78,14 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
       final orders = await ApiService.getPurchaseOrders();
       final products = await ApiService.getProducts();
 
+      List<Shop> shops = [];
+      try {
+        shops = await ApiService.getShops();
+      } catch (_) {
+        // Shop list unavailable -- the picker falls back to the
+        // server-side default shop.
+      }
+
       List<Map<String, dynamic>> suppliers = [];
       try {
         suppliers = await ApiService.getSuppliers();
@@ -89,7 +100,14 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
         for (final row in inventory) {
           final productId = row['product']?.toString();
           if (productId == null) continue;
-          stock[productId] = int.tryParse(row['quantity']?.toString() ?? '') ?? 0;
+          final quantity = int.tryParse(row['quantity']?.toString() ?? '') ?? 0;
+          final shopKey = row['shop']?.toString() ?? '';
+          if (shopKey.isEmpty) {
+            stock[productId] = quantity;
+          } else {
+            // Keyed per shop so multi-shop owners see the right stock.
+            stock['${shopKey}_$productId'] = quantity;
+          }
         }
       } catch (_) {
         // Inventory endpoint unavailable -- stock hints stay hidden.
@@ -100,6 +118,10 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
         _orders = orders;
         _products = products;
         _suppliers = suppliers;
+        _shops = shops;
+        // Single-shop accounts get their shop preselected; multi-shop
+        // owners pick explicitly.
+        _selectedShopId ??= shops.length == 1 ? shops.first.id : null;
         _stockByProduct = stock;
         _loading = false;
       });
@@ -129,14 +151,32 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
   // FORM
   // ==========================================================
 
+  /// Products visible for the currently selected receiving shop.
+  List<Product> get _productsForShop {
+    if (_selectedShopId == null) return _products;
+    return _products.where((p) => p.shopId == _selectedShopId).toList();
+  }
+
   Product? get _selectedProduct {
-    for (final product in _products) {
+    for (final product in _productsForShop) {
       if (product.id == _selectedProductId) return product;
     }
     return null;
   }
 
   int get _formQuantity => int.tryParse(_quantityController.text.trim()) ?? 0;
+
+  void _onShopSelected(String? shopId) {
+    setState(() {
+      if (_selectedShopId == shopId) return;
+      _selectedShopId = shopId;
+      // Products belong to shops -- reset the pick and any composed lines
+      // so products from another shop can't slip into the purchase.
+      _selectedProductId = null;
+      _costController.clear();
+      _items.clear();
+    });
+  }
 
   void _onProductSelected(String? productId) {
     setState(() {
@@ -208,6 +248,10 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
   }
 
   Future<void> _createPurchase() async {
+    if (_selectedShopId == null) {
+      _showError('Select which shop receives the stock');
+      return;
+    }
     if (_selectedSupplierId == null) {
       _showError('Select a supplier');
       return;
@@ -220,6 +264,7 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
     setState(() => _creating = true);
     try {
       final payload = <String, dynamic>{
+        'shop': _selectedShopId,
         'supplier': _selectedSupplierId,
         if (_expectedDelivery != null) 'expected_delivery': _formatDate(_expectedDelivery!),
         'notes': _notesController.text.trim(),
@@ -490,7 +535,10 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
 
   Widget _buildRestockForm() {
     final selected = _selectedProduct;
-    final currentStock = selected != null ? (_stockByProduct[selected.id] ?? 0) : 0;
+    final stockKey = selected == null
+        ? null
+        : (_selectedShopId != null ? '${_selectedShopId}_${selected.id}' : selected.id);
+    final currentStock = stockKey != null ? (_stockByProduct[stockKey] ?? 0) : 0;
 
     return Card(
       elevation: 1,
@@ -526,6 +574,27 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
               ],
             ),
             const SizedBox(height: 20),
+
+            // ---- Receiving shop ----
+            DropdownButtonFormField<String>(
+              value: _selectedShopId,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Receiving shop *',
+                border: OutlineInputBorder(),
+              ),
+              hint: Text(_shops.isEmpty
+                  ? 'Loading shops…'
+                  : 'Which shop gets this stock?'),
+              items: _shops
+                  .map((shop) => DropdownMenuItem<String>(
+                        value: shop.id,
+                        child: Text(shop.name, overflow: TextOverflow.ellipsis),
+                      ))
+                  .toList(),
+              onChanged: _onShopSelected,
+            ),
+            const SizedBox(height: 16),
 
             // ---- Supplier ----
             Row(
@@ -568,8 +637,13 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
                 labelText: 'Product *',
                 border: OutlineInputBorder(),
               ),
-              hint: Text(_products.isEmpty ? 'No products in the store yet' : 'Select product to restock'),
-              items: _products
+              hint: Text(
+                  _selectedShopId == null
+                      ? 'Pick a shop first'
+                      : _productsForShop.isEmpty
+                          ? 'No products in this shop yet'
+                          : 'Select product to restock'),
+              items: _productsForShop
                   .map((product) => DropdownMenuItem<String>(
                         value: product.id,
                         child: Text(
@@ -774,6 +848,14 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
     );
   }
 
+  String _shopName(String? shopId) {
+    if (shopId == null) return '';
+    for (final shop in _shops) {
+      if (shop.id == shopId) return shop.name;
+    }
+    return '';
+  }
+
   Widget _buildOrderCard(PurchaseOrder order) {
     final canApprove = order.status == 'DRAFT';
     final canReceive = order.status == 'APPROVED' ||
@@ -797,7 +879,10 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
-            'PO #${order.id} · ${order.lines.length} product${order.lines.length == 1 ? '' : 's'} · ${_formatDate(order.createdAt)}',
+            'PO #${order.id}'
+            '${_shopName(order.shopId).isEmpty ? '' : ' · → ${_shopName(order.shopId)}'}'
+            ' · ${order.lines.length} product${order.lines.length == 1 ? '' : 's'}'
+            ' · ${_formatDate(order.createdAt)}',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
         ),
