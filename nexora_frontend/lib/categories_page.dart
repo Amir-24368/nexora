@@ -136,12 +136,24 @@ class _CategoriesPageState extends State<CategoriesPage> {
     }
   }
 
+  /// Flattens the category tree for the parent picker. The API returns a
+  /// flat list where children ALSO appear nested in their parent, so the
+  /// same category can be reached twice -- dedupe by id or DropdownButton
+  /// crashes with "multiple items with the same value".
   List<Category> _flattenCategories(List<Category> cats) {
-    List<Category> result = [];
-    for (var cat in cats) {
-      result.add(cat);
-      result.addAll(_flattenCategories(cat.children));
+    final result = <Category>[];
+    final ids = <String>{};
+    void traverse(List<Category> nodes) {
+      for (var cat in nodes) {
+        if (ids.add(cat.id)) {
+          result.add(cat);
+        }
+        if (cat.children.isNotEmpty) {
+          traverse(cat.children);
+        }
+      }
     }
+    traverse(cats);
     return result;
   }
 
