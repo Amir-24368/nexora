@@ -103,8 +103,12 @@ class NxTheme {
   );
 
   /// Palette for [context]'s current brightness.
+  ///
+  /// Uses the RESOLVED Material theme (which already accounts for the app's
+  /// ThemeMode), not the raw platform brightness — otherwise a dark app
+  /// theme on a light-mode device would pick the light palette.
   static NxTheme of(BuildContext context) {
-    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return dark ? NxTheme.dark : NxTheme.light;
   }
 

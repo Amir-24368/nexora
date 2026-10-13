@@ -129,11 +129,20 @@ class _AdminHero extends StatelessWidget {
             children: [
               Text('Nexora', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: onAccent)),
               const Spacer(),
-              _HeroAction(icon: Icons.dark_mode_outlined, label: 'Theme', onTap: () {
-                final mq = MediaQuery.of(context);
-                final dark = mq.platformBrightness == Brightness.dark;
-                nxThemeMode.value = dark ? ThemeMode.light : ThemeMode.dark;
-              }),
+              // Cycle based on the APP's theme mode (not the platform one),
+              // so the toggle works even when the mode is System.
+              ValueListenableBuilder<ThemeMode>(
+                valueListenable: nxThemeMode,
+                builder: (context, mode, _) => _HeroAction(
+                  icon: mode == ThemeMode.dark
+                      ? Icons.dark_mode_outlined
+                      : mode == ThemeMode.light
+                          ? Icons.light_mode_outlined
+                          : Icons.brightness_auto_outlined,
+                  label: 'Theme',
+                  onTap: () => nxThemeMode.value = nxNextTheme(mode),
+                ),
+              ),
               const SizedBox(width: 8),
               _HeroAction(icon: Icons.logout_rounded, label: 'Log out', onTap: onLogout),
             ],
