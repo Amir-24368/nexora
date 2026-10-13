@@ -401,7 +401,7 @@ class _GoodsManagementPageState extends State<GoodsManagementPage> {
             Expanded(
               child: Text(
                 hasValue ? controller.text : 'Tap to select',
-                style: TextStyle(fontSize: 14, color: hasValue ? palette.textPrimary : palette.textMuted.withOpacity(0.7), fontWeight: FontWeight.w500),
+                style: TextStyle(fontSize: 14, color: hasValue ? palette.textPrimary : palette.textMuted.withValues(alpha: 0.7), fontWeight: FontWeight.w500),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -472,6 +472,7 @@ class _GoodsManagementPageState extends State<GoodsManagementPage> {
       if (!mounted) return;
       Navigator.pop(context);
       await _loadData(showSpinner: false);
+      if (!mounted) return;
       nxSnack(context, _editingProductId == null ? 'Product added' : 'Product updated');
     } catch (e) {
       String errorMsg = e.toString().replaceFirst('Exception: ', '');

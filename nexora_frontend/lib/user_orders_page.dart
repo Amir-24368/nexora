@@ -89,7 +89,7 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
       return NxErrorView(message: error, onRetry: _loadOrders);
     }
     if (sales.isEmpty) {
-      return NxEmptyState(
+      return const NxEmptyState(
         icon: Icons.receipt_long_outlined,
         title: 'No orders yet',
         message: 'Everything you buy will show up here.',

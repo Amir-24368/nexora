@@ -130,7 +130,7 @@ class NxButton extends StatelessWidget {
         bg = enabled ? palette.danger : palette.surfaceAlt;
         fg = onAccent;
       case NxButtonVariant.dangerSoft:
-        bg = palette.danger.withOpacity(0.12);
+        bg = palette.danger.withValues(alpha: 0.12);
         fg = palette.danger;
       case NxButtonVariant.success:
         bg = enabled ? palette.success : palette.surfaceAlt;
@@ -403,7 +403,7 @@ class NxTextField extends StatelessWidget {
         focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.danger, width: 1.4)),
         disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.border)),
         labelStyle: TextStyle(color: palette.textMuted, fontSize: 14),
-        hintStyle: TextStyle(color: palette.textMuted.withOpacity(0.7), fontSize: 14),
+        hintStyle: TextStyle(color: palette.textMuted.withValues(alpha: 0.7), fontSize: 14),
       ),
     );
   }
@@ -424,10 +424,10 @@ class NxBadge extends StatelessWidget {
     final (color, bg) = switch (variant) {
       NxBadgeVariant.neutral => (palette.textMuted, palette.surfaceAlt),
       NxBadgeVariant.primary => (palette.primary, palette.primarySoft),
-      NxBadgeVariant.success => (palette.success, palette.success.withOpacity(0.12)),
-      NxBadgeVariant.warning => (palette.warning, palette.warning.withOpacity(0.12)),
-      NxBadgeVariant.danger => (palette.danger, palette.danger.withOpacity(0.12)),
-      NxBadgeVariant.info => (palette.info, palette.info.withOpacity(0.12)),
+      NxBadgeVariant.success => (palette.success, palette.success.withValues(alpha: 0.12)),
+      NxBadgeVariant.warning => (palette.warning, palette.warning.withValues(alpha: 0.12)),
+      NxBadgeVariant.danger => (palette.danger, palette.danger.withValues(alpha: 0.12)),
+      NxBadgeVariant.info => (palette.info, palette.info.withValues(alpha: 0.12)),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -467,7 +467,7 @@ class NxIconBlock extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(color: color.withOpacity(0.13), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(16)),
       child: Center(child: Icon(icon, color: color, size: size * 0.5)),
     );
   }

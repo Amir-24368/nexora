@@ -403,7 +403,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
               decoration: BoxDecoration(
                 color: Colors.blue.shade700,
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 2)),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 2)),
                 ],
               ),
               child: SafeArea(
@@ -448,7 +448,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
                     child: Container(
                       decoration: BoxDecoration(
                         boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6, offset: const Offset(0, 2)),
+                          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 2)),
                         ],
                       ),
                       child: TextField(

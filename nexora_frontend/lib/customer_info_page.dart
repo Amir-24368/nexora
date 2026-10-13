@@ -164,8 +164,8 @@ class _CustomerInfoPageState extends State<CustomerInfoPage> {
       } else {
         await ApiService.updateCustomer(existing.id, data);
       }
-      if (!mounted) return;
       await _loadData();
+      if (!mounted) return;
       nxSnack(context, existing == null ? 'Customer added' : 'Customer updated');
     } catch (e) {
       if (!mounted) return;
@@ -185,8 +185,8 @@ class _CustomerInfoPageState extends State<CustomerInfoPage> {
     try {
       await ApiService.deleteCustomer(c.id);
       _expandedIds.remove(c.id);
-      if (!mounted) return;
       await _loadData();
+      if (!mounted) return;
       nxSnack(context, 'Customer deleted');
     } catch (e) {
       if (!mounted) return;

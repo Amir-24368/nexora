@@ -222,7 +222,9 @@ class ApiService {
         await prefs.setString('access_token', data['access'] ?? '');
         return true;
       }
-    } catch (e) {}
+    } catch (e) {
+      // Token refresh is best-effort; failure falls through to re-login.
+    }
     return false;
   }
 
@@ -348,7 +350,7 @@ class ApiService {
   // ============================================================
 
   static Future<List<Product>> getProducts({String? shopId}) async {
-    final response = await _request('GET', '/products/' + (shopId != null ? '?shop=$shopId' : ''));
+    final response = await _request('GET', '/products/${shopId != null ? '?shop=$shopId' : ''}');
     List<dynamic> list;
     if (response is List) {
       list = response;
@@ -695,7 +697,7 @@ class ApiService {
             msg = err['detail'];
           } else if (err['errors'] is Map) {
             (err['errors'] as Map).forEach((k, v) {
-              msg += ' ${k}: ${v is List ? v.join(", ") : v}';
+              msg += ' $k: ${v is List ? v.join(", ") : v}';
             });
           }
         }

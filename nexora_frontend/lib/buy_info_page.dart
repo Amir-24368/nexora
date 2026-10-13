@@ -141,12 +141,12 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
   void _showError(Object e) {
     if (!mounted) return;
     final message = e.toString().replaceFirst('Exception: ', '');
-    nxSnack(this.context, message, isError: true);
+    nxSnack(context, message, isError: true);
   }
 
   void _showSuccess(String message) {
     if (!mounted) return;
-    nxSnack(this.context, message);
+    nxSnack(context, message);
   }
 
   // ==========================================================
@@ -768,7 +768,7 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
 
   Widget _buildOrdersList() {
     if (_orders.isEmpty) {
-      return NxEmptyState(
+      return const NxEmptyState(
         icon: Icons.receipt_long_outlined,
         title: 'No purchase orders yet',
         message: 'Create your first restock to bring stock into inventory.',

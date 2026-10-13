@@ -146,7 +146,7 @@ class _AdminHero extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Everything your store needs, in one place.',
-            style: TextStyle(fontSize: 13.5, color: onAccent.withOpacity(0.85)),
+            style: TextStyle(fontSize: 13.5, color: onAccent.withValues(alpha: 0.85)),
           ),
         ],
       ),
@@ -163,7 +163,7 @@ class _HeroAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withOpacity(0.16),
+      color: Colors.white.withValues(alpha: 0.16),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,

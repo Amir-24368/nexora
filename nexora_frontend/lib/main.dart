@@ -67,7 +67,7 @@ class NxApp extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22), side: BorderSide(color: p.border)),
       ),
-      textSelectionTheme: TextSelectionThemeData(cursorColor: p.primary, selectionColor: p.primary.withOpacity(0.25), selectionHandleColor: p.primary),
+      textSelectionTheme: TextSelectionThemeData(cursorColor: p.primary, selectionColor: p.primary.withValues(alpha: 0.25), selectionHandleColor: p.primary),
       dropdownMenuTheme: DropdownMenuThemeData(
         textStyle: TextStyle(fontSize: 15, color: p.textPrimary, fontFamily: 'Inter'),
       ),

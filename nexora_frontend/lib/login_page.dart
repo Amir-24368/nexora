@@ -215,11 +215,11 @@ class _LoginPageState extends State<LoginPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Row(
+                        const Row(
                           children: [
-                            const NxLogo(size: 40),
-                            const Spacer(),
-                            const NxThemeToggle(),
+                            NxLogo(size: 40),
+                            Spacer(),
+                            NxThemeToggle(),
                           ],
                         ),
                         const SizedBox(height: 28),
@@ -368,7 +368,7 @@ class _Glow extends StatelessWidget {
       child: Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [color, color.withOpacity(0)])),
+        decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)])),
       ),
     );
   }

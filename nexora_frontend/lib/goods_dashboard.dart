@@ -26,7 +26,7 @@ class GoodsDashboard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                NxSectionHeader(title: 'Goods workspace', subtitle: 'Choose what you want to manage'),
+                const NxSectionHeader(title: 'Goods workspace', subtitle: 'Choose what you want to manage'),
                 const SizedBox(height: 8),
                 NxCard(
                   padding: const EdgeInsets.all(18),

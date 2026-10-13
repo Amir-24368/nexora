@@ -20,7 +20,7 @@ class _UserCartPageState extends State<UserCartPage> {
     final palette = nxOf(context);
 
     if (cart.items.isEmpty) {
-      return NxEmptyState(
+      return const NxEmptyState(
         icon: Icons.shopping_cart_outlined,
         title: 'Your cart is empty',
         message: 'Browse the shop and add something you like.',
