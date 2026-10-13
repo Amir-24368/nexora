@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'models/shop.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 class ShopManagementPage extends StatefulWidget {
   const ShopManagementPage({super.key});
@@ -50,6 +52,11 @@ class _ShopManagementPageState extends State<ShopManagementPage>
     super.dispose();
   }
 
+  void _showSnack(String message, {bool isError = false}) {
+    if (!mounted) return;
+    nxSnack(context, message, isError: isError);
+  }
+
   // =======================================================================
   // SHOPS
   // =======================================================================
@@ -90,57 +97,44 @@ class _ShopManagementPageState extends State<ShopManagementPage>
     }
     showDialog(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(_editingShopId == null ? 'Add Shop' : 'Edit Shop'),
-          content: SingleChildScrollView(
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'Shop Name'),
-                    validator: (v) =>
-                        v!.trim().isEmpty ? 'Shop name is required' : null,
-                  ),
-                  TextFormField(
-                    controller: _taxIdController,
-                    decoration: const InputDecoration(labelText: 'Tax ID'),
-                  ),
-                  TextFormField(
-                    controller: _phoneController,
-                    decoration: const InputDecoration(labelText: 'Phone'),
-                  ),
-                  TextFormField(
-                    controller: _addressController,
-                    decoration: const InputDecoration(labelText: 'Address'),
-                  ),
-                  TextFormField(
-                    controller: _logoUrlController,
-                    decoration: const InputDecoration(labelText: 'Logo URL'),
-                  ),
-                  CheckboxListTile(
-                    title: const Text('Active'),
-                    value: _isActive,
-                    onChanged: (v) => setDialogState(() => _isActive = v!),
-                  ),
-                ],
-              ),
+      builder: (dialogContext) => nxDialog(
+        context: dialogContext,
+        title: _editingShopId == null ? 'Add shop' : 'Edit shop',
+        content: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                NxTextField(
+                  controller: _nameController,
+                  label: 'Shop name',
+                  autofocus: true,
+                  validator: (v) => v!.trim().isEmpty ? 'Shop name is required' : null,
+                ),
+                const SizedBox(height: 10),
+                NxTextField(controller: _taxIdController, label: 'Tax ID'),
+                const SizedBox(height: 10),
+                NxTextField(controller: _phoneController, label: 'Phone'),
+                const SizedBox(height: 10),
+                NxTextField(controller: _addressController, label: 'Address'),
+                const SizedBox(height: 10),
+                NxTextField(controller: _logoUrlController, label: 'Logo URL'),
+                const SizedBox(height: 4),
+                NxSwitchRow(
+                  title: 'Active',
+                  subtitle: 'Products from this shop appear for sale',
+                  value: _isActive,
+                  onToggle: (v) => setState(() => _isActive = v),
+                ),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => _saveShop(),
-              child: Text(_editingShopId == null ? 'Add' : 'Update'),
-            ),
-          ],
         ),
+        actions: [
+          NxButton(label: 'Cancel', variant: NxButtonVariant.ghost, onPressed: () => Navigator.pop(dialogContext)),
+          NxButton(label: _editingShopId == null ? 'Add shop' : 'Save', onPressed: _saveShop),
+        ],
       ),
     );
   }
@@ -164,104 +158,107 @@ class _ShopManagementPageState extends State<ShopManagementPage>
       if (!mounted) return;
       Navigator.pop(context);
       _loadShops();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-            _editingShopId == null ? 'Shop added successfully' : 'Shop updated'),
-        backgroundColor: Colors.green,
-      ));
+      _showSnack(_editingShopId == null ? 'Shop added' : 'Shop updated');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to save shop: $e'),
-        backgroundColor: Colors.red,
-      ));
+      _showSnack('Failed to save shop: $e', isError: true);
     }
   }
 
   Future<void> _deleteShop(Shop shop) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Shop'),
-        content: Text('Are you sure you want to delete "${shop.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await nxConfirm(
+      context,
+      title: 'Delete shop',
+      message: 'Delete "${shop.name}"? Products assigned to this shop may be affected.',
+      confirmLabel: 'Delete',
+      variant: NxButtonVariant.danger,
     );
     if (confirmed != true) return;
     try {
       await ApiService.deleteShop(shop.id);
       _loadShops();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Shop deleted'), backgroundColor: Colors.green),
-      );
+      _showSnack('Shop deleted');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete shop: $e'), backgroundColor: Colors.red),
-      );
+      _showSnack('Failed to delete shop: $e', isError: true);
     }
   }
 
   Widget _buildShopsTab() {
+    final palette = nxOf(context);
     if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const NxLoader();
     }
     if (error.isNotEmpty) {
-      return Center(child: Text('Error: $error'));
+      return NxErrorView(message: error, onRetry: _loadShops);
     }
     if (shops.isEmpty) {
-      return const Center(child: Text('No shops yet. Add your first shop!'));
+      return NxEmptyState(
+        icon: Icons.storefront_outlined,
+        title: 'No shops yet',
+        message: 'Add your first shop — products and purchases all live inside shops.',
+        actionLabel: 'Add shop',
+        onAction: () => _showShopDialog(),
+      );
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 88),
       itemCount: shops.length,
       itemBuilder: (_, i) {
         final shop = shops[i];
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Colors.deepPurple.shade100,
-              child: const Icon(Icons.storefront, color: Colors.deepPurple),
-            ),
-            title: Text(shop.name,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if ((shop.address ?? '').isNotEmpty) Text(shop.address ?? ''),
-                if ((shop.phone ?? '').isNotEmpty) Text('📞 ${shop.phone}'),
-                if ((shop.taxId ?? '').isNotEmpty) Text('🧾 Tax ID: ${shop.taxId}'),
-              ],
-            ),
-            isThreeLine: true,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.blue),
-                  onPressed: () => _showShopDialog(shop: shop),
+        return NxCard(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              NxIconBlock(icon: Icons.storefront_outlined, color: palette.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(shop.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                        ),
+                        NxBadge(text: shop.isActive ? 'Active' : 'Inactive', variant: shop.isActive ? NxBadgeVariant.success : NxBadgeVariant.neutral),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 2,
+                      children: [
+                        if ((shop.address ?? '').isNotEmpty)
+                          _meta(Icons.place_outlined, shop.address!, palette),
+                        if ((shop.phone ?? '').isNotEmpty)
+                          _meta(Icons.phone_outlined, shop.phone!, palette),
+                        if ((shop.taxId ?? '').isNotEmpty)
+                          _meta(Icons.receipt_outlined, 'Tax ID ${shop.taxId}', palette),
+                      ],
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () => _deleteShop(shop),
-                ),
-              ],
-            ),
+              ),
+              NxIconButton(icon: Icons.edit_outlined, tooltip: 'Edit', onTap: () => _showShopDialog(shop: shop)),
+              NxIconButton(icon: Icons.delete_outline_rounded, tooltip: 'Delete', color: palette.danger, onTap: () => _deleteShop(shop)),
+            ],
           ),
         );
       },
+    );
+  }
+
+  Widget _meta(IconData icon, String text, NxTheme palette) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: palette.textMuted),
+        const SizedBox(width: 4),
+        Text(text, style: TextStyle(fontSize: 12, color: palette.textMuted)),
+      ],
     );
   }
 
@@ -296,98 +293,64 @@ class _ShopManagementPageState extends State<ShopManagementPage>
 
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(editingId == null ? 'Add Supplier' : 'Edit Supplier'),
-        content: SizedBox(
-          width: 380,
-          child: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: nameController,
-                  autofocus: true,
-                  decoration:
-                      const InputDecoration(labelText: 'Supplier name *'),
-                  validator: (v) =>
-                      v!.trim().isEmpty ? 'Supplier name is required' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: contactController,
-                  decoration:
-                      const InputDecoration(labelText: 'Contact person'),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: phoneController,
-                  decoration: const InputDecoration(labelText: 'Phone'),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: emailController,
-                  decoration: const InputDecoration(labelText: 'Email'),
-                ),
-              ],
-            ),
+      builder: (dialogContext) => nxDialog(
+        context: dialogContext,
+        title: editingId == null ? 'Add supplier' : 'Edit supplier',
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              NxTextField(
+                controller: nameController,
+                label: 'Supplier name',
+                autofocus: true,
+                validator: (v) => v!.trim().isEmpty ? 'Supplier name is required' : null,
+              ),
+              const SizedBox(height: 10),
+              NxTextField(controller: contactController, label: 'Contact person'),
+              const SizedBox(height: 10),
+              NxTextField(controller: phoneController, label: 'Phone'),
+              const SizedBox(height: 10),
+              NxTextField(controller: emailController, label: 'Email', keyboardType: TextInputType.emailAddress),
+            ],
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (!(formKey.currentState?.validate() ?? false)) return;
-              final data = {
-                'name': nameController.text.trim(),
-                'contact_person': contactController.text.trim(),
-                'phone': phoneController.text.trim(),
-                'email': emailController.text.trim(),
-              };
-              try {
-                if (editingId == null) {
-                  await ApiService.createSupplier(data);
-                } else {
-                  await ApiService.updateSupplier(editingId, data);
-                }
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-                await _loadSuppliers();
-                _showSnack(editingId == null
-                    ? 'Supplier added'
-                    : 'Supplier updated');
-              } catch (e) {
-                _showSnack('Failed to save supplier: $e', isError: true);
+          NxButton(label: 'Cancel', variant: NxButtonVariant.ghost, onPressed: () => Navigator.pop(dialogContext)),
+          NxButton(label: editingId == null ? 'Add supplier' : 'Save', onPressed: () async {
+            if (!(formKey.currentState?.validate() ?? false)) return;
+            final data = {
+              'name': nameController.text.trim(),
+              'contact_person': contactController.text.trim(),
+              'phone': phoneController.text.trim(),
+              'email': emailController.text.trim(),
+            };
+            try {
+              if (editingId == null) {
+                await ApiService.createSupplier(data);
+              } else {
+                await ApiService.updateSupplier(editingId, data);
               }
-            },
-            child: Text(editingId == null ? 'Add' : 'Update'),
-          ),
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              await _loadSuppliers();
+              _showSnack(editingId == null ? 'Supplier added' : 'Supplier updated');
+            } catch (e) {
+              _showSnack('Failed to save supplier: $e', isError: true);
+            }
+          }),
         ],
       ),
     );
   }
 
   Future<void> _deleteSupplier(Map<String, dynamic> supplier) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Supplier'),
-        content: Text(
-            'Delete "${supplier['name'] ?? 'this supplier'}"? Their purchase orders will also be removed.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await nxConfirm(
+      context,
+      title: 'Delete supplier',
+      message: 'Delete "${supplier['name'] ?? 'this supplier'}"? Their purchase orders will also be removed.',
+      confirmLabel: 'Delete',
+      variant: NxButtonVariant.danger,
     );
     if (confirmed != true) return;
     try {
@@ -399,67 +362,56 @@ class _ShopManagementPageState extends State<ShopManagementPage>
     }
   }
 
-  void _showSnack(String message, {bool isError = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
-      ),
-    );
-  }
-
   Widget _buildSuppliersTab() {
+    final palette = nxOf(context);
     if (suppliersLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const NxLoader();
     }
     if (suppliers.isEmpty) {
-      return const Center(
-        child: Text('No suppliers yet.\nAdd one, then restock in Buy Information.',
-            textAlign: TextAlign.center),
+      return NxEmptyState(
+        icon: Icons.local_shipping_outlined,
+        title: 'No suppliers yet',
+        message: 'Add one, then restock in Buy Information.',
+        actionLabel: 'Add supplier',
+        onAction: () => _showSupplierDialog(),
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 88),
       itemCount: suppliers.length,
       itemBuilder: (_, i) {
         final s = suppliers[i];
         final contact = s['contact_person']?.toString() ?? '';
         final phone = s['phone']?.toString() ?? '';
         final email = s['email']?.toString() ?? '';
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Colors.teal.shade100,
-              child: const Icon(Icons.local_shipping_outlined, color: Colors.teal),
-            ),
-            title: Text(s['name']?.toString() ?? 'Supplier',
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (contact.isNotEmpty) Text('👤 $contact'),
-                if (phone.isNotEmpty) Text('📞 $phone'),
-                if (email.isNotEmpty) Text('✉️ $email'),
-              ],
-            ),
-            isThreeLine: true,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.blue),
-                  tooltip: 'Edit supplier',
-                  onPressed: () => _showSupplierDialog(supplier: s),
+        return NxCard(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              NxIconBlock(icon: Icons.local_shipping_outlined, color: palette.success),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s['name']?.toString() ?? 'Supplier', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                    const SizedBox(height: 3),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 2,
+                      children: [
+                        if (contact.isNotEmpty) _meta(Icons.person_outline_rounded, contact, palette),
+                        if (phone.isNotEmpty) _meta(Icons.phone_outlined, phone, palette),
+                        if (email.isNotEmpty) _meta(Icons.mail_outline_rounded, email, palette),
+                      ],
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  tooltip: 'Delete supplier',
-                  onPressed: () => _deleteSupplier(s),
-                ),
-              ],
-            ),
+              ),
+              NxIconButton(icon: Icons.edit_outlined, tooltip: 'Edit supplier', onTap: () => _showSupplierDialog(supplier: s)),
+              NxIconButton(icon: Icons.delete_outline_rounded, tooltip: 'Delete supplier', color: palette.danger, onTap: () => _deleteSupplier(s)),
+            ],
           ),
         );
       },
@@ -471,32 +423,28 @@ class _ShopManagementPageState extends State<ShopManagementPage>
   // =======================================================================
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Shop Management'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+    final palette = nxOf(context);
+
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: palette.background,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          leading: const NxBackButton(),
+          title: const Text('Shops & Suppliers'),
+          bottom: TabBar(
+            dividerColor: palette.border,
+            labelColor: palette.primary,
+            unselectedLabelColor: palette.textMuted,
+            indicatorColor: palette.primary,
+            tabs: const [
+              Tab(text: 'Shops', icon: Icon(Icons.storefront_outlined, size: 20)),
+              Tab(text: 'Suppliers', icon: Icon(Icons.local_shipping_outlined, size: 20)),
+            ],
+          ),
         ),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Shops', icon: Icon(Icons.storefront)),
-            Tab(text: 'Suppliers', icon: Icon(Icons.local_shipping_outlined)),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildShopsTab(),
-          _buildSuppliersTab(),
-        ],
-      ),
-      floatingActionButton: AnimatedBuilder(
-        animation: _tabController,
-        builder: (_, __) => FloatingActionButton(
-          tooltip: _tabController.index == 0 ? 'Add shop' : 'Add supplier',
+        floatingActionButton: FloatingActionButton.extended(
           onPressed: () {
             if (_tabController.index == 0) {
               _showShopDialog();
@@ -504,7 +452,21 @@ class _ShopManagementPageState extends State<ShopManagementPage>
               _showSupplierDialog();
             }
           },
-          child: const Icon(Icons.add),
+          backgroundColor: palette.primary,
+          foregroundColor: palette.textOnAccent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          icon: const Icon(Icons.add_rounded),
+          label: AnimatedBuilder(
+            animation: _tabController,
+            builder: (_, __) => Text(_tabController.index == 0 ? 'New shop' : 'New supplier'),
+          ),
+        ),
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildShopsTab(),
+            _buildSuppliersTab(),
+          ],
         ),
       ),
     );

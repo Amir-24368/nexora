@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'models/sale.dart';
 import 'models/category.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 class UserOrdersPage extends StatefulWidget {
   const UserOrdersPage({super.key});
@@ -37,14 +39,24 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
       // 'mine' filters by the logged-in user's email on the backend,
       // so customers only see their own orders.
       final data = await ApiService.getSales(mine: true);
-      final cats = await ApiService.getCategoriesTree();
+      if (!mounted) return;
       setState(() {
         sales = data;
         filteredSales = List.from(sales);
-        categories = cats;
+        categories = [];
         isLoading = false;
+        error = '';
       });
+      _filter();
+      try {
+        final cats = await ApiService.getCategoriesTree();
+        if (!mounted) return;
+        setState(() => categories = cats);
+      } catch (_) {
+        // Category filter is optional — orders still show without it.
+      }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         error = e.toString();
         isLoading = false;
@@ -68,139 +80,139 @@ class _UserOrdersPageState extends State<UserOrdersPage> {
     });
   }
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'COMPLETED':
-        return Colors.green;
-      case 'PENDING':
-        return Colors.orange;
-      case 'CANCELLED':
-        return Colors.red;
-      case 'RETURNED':
-        return Colors.blueGrey;
-      default:
-        return Colors.grey;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (isLoading) return const Center(child: CircularProgressIndicator());
-    if (error.isNotEmpty) return Center(child: Text('Error: $error'));
-    if (sales.isEmpty) return const Center(child: Text('No orders yet'));
+    final palette = nxOf(context);
+
+    if (isLoading) return const NxLoader(label: 'Loading your orders…');
+    if (error.isNotEmpty) {
+      return NxErrorView(message: error, onRetry: _loadOrders);
+    }
+    if (sales.isEmpty) {
+      return NxEmptyState(
+        icon: Icons.receipt_long_outlined,
+        title: 'No orders yet',
+        message: 'Everything you buy will show up here.',
+      );
+    }
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
           child: Column(
             children: [
-              TextField(
+              NxTextField(
                 controller: searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search orders...',
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                ),
+                hint: 'Search orders…',
+                prefixIcon: Icons.search_rounded,
               ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: _selectedCategoryId,
-                hint: const Text('All Categories'),
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('All Categories'),
-                  ),
-                  ..._flattenCategories(categories).map((cat) {
-                    return DropdownMenuItem<String>(
-                      value: cat.id,
-                      child: Text(cat.name),
-                    );
+              if (categories.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedCategoryId,
+                  isExpanded: true,
+                  hint: const Text('All categories'),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('All categories'),
+                    ),
+                    ..._flattenCategories(categories).map((cat) {
+                      return DropdownMenuItem<String>(
+                        value: cat.id,
+                        child: Text(cat.name, overflow: TextOverflow.ellipsis),
+                      );
+                    }),
+                  ],
+                  onChanged: (val) => setState(() {
+                    _selectedCategoryId = val;
+                    _filter();
                   }),
-                ],
-                onChanged: (val) => setState(() {
-                  _selectedCategoryId = val;
-                  _filter();
-                }),
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: _ddDecoration(),
                 ),
-                isExpanded: true,
-              ),
+              ],
             ],
           ),
         ),
         Expanded(
           child: filteredSales.isEmpty
               ? const Center(child: Text('No orders found'))
-              : ListView.builder(
-                  itemCount: filteredSales.length,
-                  itemBuilder: (_, i) {
-                    final s = filteredSales[i];
-                    final itemCount =
-                        s.items.fold<int>(0, (sum, item) => sum + item.quantity);
-                    final firstName = s.items.isNotEmpty
-                        ? (s.items.first.product?.name ?? 'Item')
-                        : 'No items';
-                    final moreCount = s.items.length - 1;
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: ListTile(
-                          leading: Container(
-                            width: 50,
-                            height: 50,
-                            color: Colors.grey.shade200,
-                            child: const Icon(Icons.receipt_long),
-                          ),
-                          title: Text('Order #${s.id}'),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                moreCount > 0
-                                    ? '$itemCount item(s): $firstName +$moreCount more'
-                                    : '$itemCount item(s): $firstName',
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: _statusColor(s.status).withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  s.status,
-                                  style: TextStyle(
-                                    color: _statusColor(s.status),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '\$${s.totalAmount.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green,
-                                ),
-                              ),
-                            ],
-                          ),
-                          trailing: Text(s.saleDate.toLocal().toString().split(' ')[0]),
-                        ),
-                      ),
-                    );
-                  },
+              : RefreshIndicator(
+                  color: palette.primary,
+                  onRefresh: _loadOrders,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                    itemCount: filteredSales.length,
+                    itemBuilder: (_, i) => _orderCard(filteredSales[i]),
+                  ),
                 ),
         ),
       ],
+    );
+  }
+
+  InputDecoration _ddDecoration() {
+    final palette = nxOf(context);
+    return InputDecoration(
+      filled: true,
+      fillColor: palette.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.border)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.border)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.primary, width: 1.4)),
+    );
+  }
+
+  Widget _orderCard(Sale s) {
+    final palette = nxOf(context);
+    final itemCount = s.items.fold<int>(0, (sum, item) => sum + item.quantity);
+    final firstName = s.items.isNotEmpty ? (s.items.first.product?.name ?? 'Item') : 'No items';
+    final moreCount = s.items.length - 1;
+
+    return NxCard(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          NxIconBlock(icon: Icons.receipt_long_outlined, color: palette.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Order #${s.id.length > 8 ? s.id.substring(0, 8) : s.id}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: palette.textPrimary),
+                      ),
+                    ),
+                    NxBadge(text: s.status, variant: nxStatusVariant(s.status)),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  moreCount > 0 ? '$itemCount item(s): $firstName +$moreCount more' : '$itemCount item(s): $firstName',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: palette.textMuted),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text('\$${s.totalAmount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: palette.success)),
+                    const Spacer(),
+                    Text(s.saleDate.toLocal().toString().split(' ')[0], style: TextStyle(fontSize: 12, color: palette.textMuted)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

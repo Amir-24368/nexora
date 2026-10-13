@@ -5,6 +5,8 @@ import 'services/api_service.dart';
 import 'models/customer.dart';
 import 'models/sale.dart';
 import 'customer_detail_page.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 class CustomerInfoPage extends StatefulWidget {
   const CustomerInfoPage({super.key});
@@ -28,6 +30,12 @@ class _CustomerInfoPageState extends State<CustomerInfoPage> {
     super.initState();
     _loadData();
     searchController.addListener(_filterCustomers);
+  }
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -63,10 +71,9 @@ class _CustomerInfoPageState extends State<CustomerInfoPage> {
   void _filterCustomers() {
     final query = searchController.text.toLowerCase();
     setState(() {
-      filteredCustomers = allCustomers.where((c) =>
-        c.fullName.toLowerCase().contains(query) ||
-        (c.email?.toLowerCase().contains(query) ?? false)
-      ).toList();
+      filteredCustomers = allCustomers
+          .where((c) => c.fullName.toLowerCase().contains(query) || (c.email?.toLowerCase().contains(query) ?? false))
+          .toList();
     });
   }
 
@@ -81,9 +88,7 @@ class _CustomerInfoPageState extends State<CustomerInfoPage> {
       final decoded = jsonDecode(msg);
       if (decoded is Map) {
         return decoded.entries
-            .map((en) => en.value is List
-                ? '${en.key}: ${(en.value as List).join(', ')}'
-                : '${en.key}: ${en.value}')
+            .map((en) => en.value is List ? '${en.key}: ${(en.value as List).join(', ')}' : '${en.key}: ${en.value}')
             .join('\n');
       }
       if (decoded is List) return decoded.join(', ');
@@ -102,28 +107,23 @@ class _CustomerInfoPageState extends State<CustomerInfoPage> {
 
     final saved = await showDialog<bool>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: Text(existing == null ? 'Add Customer' : 'Edit Customer'),
+      builder: (dialogCtx) => nxDialog(
+        context: dialogCtx,
+        title: existing == null ? 'Add customer' : 'Edit customer',
         content: Form(
           key: formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextFormField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Full Name *'),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Name is required' : null,
-                ),
-                TextFormField(
-                  controller: phoneCtrl,
-                  decoration: const InputDecoration(labelText: 'Phone Number'),
-                  keyboardType: TextInputType.phone,
-                ),
-                TextFormField(
+                NxTextField(controller: nameCtrl, label: 'Full name *', validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null),
+                const SizedBox(height: 12),
+                NxTextField(controller: phoneCtrl, label: 'Phone number', keyboardType: TextInputType.phone),
+                const SizedBox(height: 12),
+                NxTextField(
                   controller: emailCtrl,
-                  decoration: const InputDecoration(labelText: 'Email'),
+                  label: 'Email',
                   keyboardType: TextInputType.emailAddress,
                   validator: (v) {
                     final t = v?.trim() ?? '';
@@ -131,26 +131,21 @@ class _CustomerInfoPageState extends State<CustomerInfoPage> {
                     return null;
                   },
                 ),
-                TextFormField(
-                  controller: addressCtrl,
-                  decoration: const InputDecoration(labelText: 'Address'),
-                ),
+                const SizedBox(height: 12),
+                NxTextField(controller: addressCtrl, label: 'Address'),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
+          NxButton(label: 'Cancel', variant: NxButtonVariant.ghost, onPressed: () => Navigator.pop(dialogCtx, false)),
+          NxButton(
+            label: existing == null ? 'Add' : 'Save',
             onPressed: () {
               if (formKey.currentState?.validate() ?? false) {
                 Navigator.pop(dialogCtx, true);
               }
             },
-            child: Text(existing == null ? 'Add' : 'Save'),
           ),
         ],
       ),
@@ -171,39 +166,20 @@ class _CustomerInfoPageState extends State<CustomerInfoPage> {
       }
       if (!mounted) return;
       await _loadData();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(existing == null ? 'Customer added' : 'Customer updated'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      nxSnack(context, existing == null ? 'Customer added' : 'Customer updated');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_readableError(e)), backgroundColor: Colors.red),
-      );
+      nxSnack(context, _readableError(e), isError: true);
     }
   }
 
   Future<void> _deleteCustomer(Customer c) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: Text('Delete ${c.fullName}?'),
-        content: const Text(
-            'This removes the customer record. Their past orders stay in the system.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await nxConfirm(
+      context,
+      title: 'Delete ${c.fullName}?',
+      message: 'This removes the customer record. Their past orders stay in the system.',
+      confirmLabel: 'Delete',
+      variant: NxButtonVariant.danger,
     );
     if (confirmed != true || !mounted) return;
     try {
@@ -211,224 +187,266 @@ class _CustomerInfoPageState extends State<CustomerInfoPage> {
       _expandedIds.remove(c.id);
       if (!mounted) return;
       await _loadData();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Customer deleted'), backgroundColor: Colors.green),
-      );
+      nxSnack(context, 'Customer deleted');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_readableError(e)), backgroundColor: Colors.red),
-      );
+      nxSnack(context, _readableError(e), isError: true);
     }
   }
 
   @override
-  void dispose() {
-    searchController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (isLoading) return const Center(child: CircularProgressIndicator());
-    if (error.isNotEmpty) return Center(child: Text('Error: $error'));
-
+    final palette = nxOf(context);
     return Scaffold(
+      backgroundColor: palette.background,
       appBar: AppBar(
-        title: const Text('Customer Information'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        backgroundColor: Colors.transparent,
+        leading: const NxBackButton(),
+        title: const Text('Customers'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_add_alt),
-            tooltip: 'Add Customer',
+            icon: const Icon(Icons.person_add_alt_rounded),
+            tooltip: 'Add customer',
             onPressed: () => _openCustomerDialog(),
           ),
         ],
       ),
-      body: Column(
+      body: isLoading
+          ? const NxLoader(label: 'Loading customers...')
+          : error.isNotEmpty
+              ? NxErrorView(message: error, onRetry: _loadData)
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _StatCard(
+                              label: 'Customers',
+                              value: allCustomers.length.toString(),
+                              icon: Icons.people_alt_rounded,
+                              color: palette.info,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _StatCard(
+                              label: 'Total spent',
+                              value: '\$${totalSpentAll.toStringAsFixed(2)}',
+                              icon: Icons.payments_rounded,
+                              color: palette.success,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                      child: NxTextField(
+                        controller: searchController,
+                        hint: 'Search by name or email...',
+                        prefixIcon: Icons.search_rounded,
+                      ),
+                    ),
+                    Expanded(
+                      child: filteredCustomers.isEmpty
+                          ? NxEmptyState(
+                              icon: Icons.people_outline_rounded,
+                              title: 'No customers found',
+                              message: 'Add your first customer to start tracking orders.',
+                              actionLabel: 'Add customer',
+                              onAction: () => _openCustomerDialog(),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                              itemCount: filteredCustomers.length,
+                              itemBuilder: (_, i) {
+                                final c = filteredCustomers[i];
+                                final orders = salesByCustomer[c.id] ?? const <Sale>[];
+                                DateTime? first;
+                                for (final s in orders) {
+                                  if (first == null || s.saleDate.isBefore(first)) first = s.saleDate;
+                                }
+                                // Compute from the customer's real orders, not the stored
+                                // snapshot -- stale totals can't contradict the list anymore.
+                                final spent = orders.where((s) => s.status == 'COMPLETED').fold<double>(0, (sum, s) => sum + s.totalAmount);
+                                final isExpanded = _expandedIds.contains(c.id);
+                                return _CustomerCard(
+                                  customer: c,
+                                  orders: orders,
+                                  firstOrder: first,
+                                  spent: spent,
+                                  expanded: isExpanded,
+                                  onToggle: () => setState(() {
+                                    isExpanded ? _expandedIds.remove(c.id) : _expandedIds.add(c.id);
+                                  }),
+                                  onEdit: () => _openCustomerDialog(existing: c),
+                                  onDelete: () => _deleteCustomer(c),
+                                  onOpenProfile: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => CustomerDetailPage(customer: c)),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({required this.label, required this.value, required this.icon, required this.color});
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = nxOf(context);
+    return NxCard(
+      padding: const EdgeInsets.all(14),
+      child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            child: Row(
+          NxIconBlock(icon: icon, color: color, size: 42),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: _buildSummaryCard(
-                      'Total Customers', allCustomers.length.toString(), Colors.blue),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildSummaryCard(
-                      'Total Spent', '${totalSpentAll.toStringAsFixed(2)} USD', Colors.green),
-                ),
+                Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: palette.textMuted)),
+                const SizedBox(height: 2),
+                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: palette.textPrimary)),
               ],
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: TextField(
-              controller: searchController,
-              decoration: InputDecoration(
-                hintText: 'Search by name or email...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: filteredCustomers.isEmpty
-                ? const Center(child: Text('No customers found'))
-                : ListView.builder(
-                    itemCount: filteredCustomers.length,
-                    itemBuilder: (_, i) {
-                      final c = filteredCustomers[i];
-                      final orders = salesByCustomer[c.id] ?? const <Sale>[];
-                      DateTime? first;
-                      for (final s in orders) {
-                        if (first == null || s.saleDate.isBefore(first)) first = s.saleDate;
-                      }
-                      // Compute from the customer's real orders, not the stored
-                      // snapshot -- stale totals can't contradict the list anymore.
-                      final spent = orders
-                          .where((s) => s.status == 'COMPLETED')
-                          .fold<double>(0, (sum, s) => sum + s.totalAmount);
-                      final isExpanded = _expandedIds.contains(c.id);
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        child: Column(
-                          children: [
-                            ListTile(
-                              leading: const CircleAvatar(child: Icon(Icons.person)),
-                              title: Text(c.fullName),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Phone: ${c.phone.isNotEmpty ? c.phone : '-'} | Email: ${c.email ?? 'N/A'}'),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    first != null
-                                        ? '${orders.length} order(s) · Since ${first.toLocal().toString().split(' ')[0]}'
-                                        : 'No purchases yet',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                  ),
-                                ],
-                              ),
-                          trailing: Text('Spent: \$${spent.toStringAsFixed(2)}'),
-                              onTap: () => setState(() {
-                                isExpanded
-                                    ? _expandedIds.remove(c.id)
-                                    : _expandedIds.add(c.id);
-                              }),
-                        ),
-                              if (isExpanded)
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Divider(),
-                                      const Text('Order history',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.bold, fontSize: 13)),
-                                      const SizedBox(height: 4),
-                                      if (orders.isEmpty)
-                                        const Text('No purchases yet',
-                                            style: TextStyle(fontSize: 12)),
-                                      ...orders.map(
-                                        (s) => Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 2),
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  'Order #${s.id} · ${s.saleDate.toLocal().toString().split(' ')[0]} · ${s.items.length} item(s)',
-                                                  style: const TextStyle(fontSize: 12),
-                                                ),
-                                              ),
-                                              Text(
-                                                '${s.totalAmount.toStringAsFixed(2)}',
-                                                style: const TextStyle(
-                                                    fontSize: 12, fontWeight: FontWeight.w600),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.end,
-                                        children: [
-                                          TextButton.icon(
-                                            onPressed: () => _openCustomerDialog(existing: c),
-                                            icon: const Icon(Icons.edit, size: 16),
-                                            label: const Text('Edit'),
-                                          ),
-                                          TextButton.icon(
-                                            onPressed: () => _deleteCustomer(c),
-                                            icon: const Icon(Icons.delete_outline, size: 16),
-                                            label: const Text('Delete'),
-                                            style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                          ),
-                                          TextButton.icon(
-                                            onPressed: () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) =>
-                                                      CustomerDetailPage(customer: c),
-                                                ),
-                                              );
-                                            },
-                                            icon: const Icon(Icons.open_in_new, size: 16),
-                                            label: const Text('Full profile'),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildSummaryCard(String label, String value, Color color) {
-    return Card(
-      elevation: 2,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: color.withOpacity(0.1),
-        ),
-        child: Column(
-          children: [
-            Text(
-              label,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-              textAlign: TextAlign.center,
+class _CustomerCard extends StatelessWidget {
+  const _CustomerCard({
+    required this.customer,
+    required this.orders,
+    required this.firstOrder,
+    required this.spent,
+    required this.expanded,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onOpenProfile,
+  });
+
+  final Customer customer;
+  final List<Sale> orders;
+  final DateTime? firstOrder;
+  final double spent;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onOpenProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = nxOf(context);
+    final initials = customer.fullName.trim().isNotEmpty
+        ? customer.fullName.trim().split(RegExp(r'\s+')).take(2).map((w) => w[0].toUpperCase()).join()
+        : '?';
+    return NxCard(
+      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 10),
+      onTap: onToggle,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: nxHeroGradient),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(initials, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(customer.fullName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                    const SizedBox(height: 2),
+                    Text('Phone: ${customer.phone.isNotEmpty ? customer.phone : '-'} | Email: ${customer.email ?? 'N/A'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: palette.textMuted)),
+                    const SizedBox(height: 2),
+                    Text(
+                      firstOrder != null ? '${orders.length} order(s) · since ${_date(firstOrder!)}' : 'No purchases yet',
+                      style: TextStyle(fontSize: 11.5, color: palette.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('\$${spent.toStringAsFixed(2)}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: palette.success)),
+                  Text('spent', style: TextStyle(fontSize: 11, color: palette.textMuted)),
+                ],
+              ),
+              Icon(expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 20, color: palette.textMuted),
+            ],
+          ),
+          if (expanded) ...[
+            const SizedBox(height: 10),
+            Divider(color: palette.border, height: 1),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('ORDER HISTORY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1, color: palette.textMuted)),
             ),
             const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
-              textAlign: TextAlign.center,
+            if (orders.isEmpty)
+              Text('No purchases yet', style: TextStyle(fontSize: 12, color: palette.textMuted))
+            else
+              ...orders.map((s) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Order #${s.id} · ${_date(s.saleDate)} · ${s.items.length} item(s)',
+                            style: TextStyle(fontSize: 12, color: palette.textMuted),
+                          ),
+                        ),
+                        Text(
+                          '\$${s.totalAmount.toStringAsFixed(2)}',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: palette.textPrimary),
+                        ),
+                      ],
+                    ),
+                  )),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                NxButton(label: 'Edit', variant: NxButtonVariant.ghost, icon: Icons.edit_outlined, height: 38, onPressed: onEdit),
+                const SizedBox(width: 8),
+                NxButton(label: 'Delete', variant: NxButtonVariant.dangerSoft, icon: Icons.delete_outline_rounded, height: 38, onPressed: onDelete),
+                const SizedBox(width: 8),
+                NxButton(label: 'Full profile', variant: NxButtonVariant.soft, icon: Icons.open_in_new_rounded, height: 38, onPressed: onOpenProfile),
+              ],
             ),
           ],
-        ),
+        ],
       ),
     );
   }
+
+  String _date(DateTime d) => d.toLocal().toString().split(' ')[0];
 }

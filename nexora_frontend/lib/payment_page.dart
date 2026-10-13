@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'user_cart_manager.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 class PaymentPage extends StatefulWidget {
   final List<CartItem> cartItems;
@@ -67,112 +69,137 @@ class _PaymentPageState extends State<PaymentPage> {
       CartManager().clearCart();
       if (!mounted) return;
       setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Payment successful!'), backgroundColor: Colors.green),
-      );
+      nxSnack(context, 'Payment successful!');
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Payment failed: ${e.toString().replaceFirst('Exception: ', '')}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      nxSnack(context, 'Payment failed: ${e.toString().replaceFirst('Exception: ', '')}', isError: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final palette = nxOf(context);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Secure Payment')),
+      backgroundColor: palette.background,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        leading: const NxBackButton(),
+        title: const Text('Secure payment'),
+      ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Card(
-            elevation: 8,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    const Text('Payment Details', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Total Amount:'),
-                          Text('\$${widget.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    TextFormField(
-                      controller: _cardNumberController,
-                      keyboardType: TextInputType.number,
-                      maxLength: 19,
-                      decoration: const InputDecoration(labelText: 'Card Number', hintText: '1234 5678 9012 3456', prefixIcon: Icon(Icons.credit_card)),
-                      onChanged: _formatCardNumber,
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Required';
-                        if (v.replaceAll(RegExp(r'\s'), '').length != 16) return '16 digits';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _expiryController,
-                            keyboardType: TextInputType.number,
-                            maxLength: 5,
-                            decoration: const InputDecoration(labelText: 'Expiry', hintText: 'MM/YY'),
-                            onChanged: _formatExpiry,
-                            validator: (v) => v == null || v.isEmpty ? 'Required' : RegExp(r'^(0[1-9]|1[0-2])\/([0-9]{2})$').hasMatch(v) ? null : 'MM/YY',
-                          ),
+          padding: const EdgeInsets.all(20),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ---- Order summary ----
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: nxHeroGradient),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Order total', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                            SizedBox(height: 2),
+                            Text('Encrypted & secure', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                          ],
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _cvvController,
-                            keyboardType: TextInputType.number,
-                            maxLength: 3,
-                            obscureText: true,
-                            decoration: const InputDecoration(labelText: 'CVV2', hintText: '123'),
-                            validator: (v) => v == null || v.isEmpty ? 'Required' : v.length == 3 ? null : '3 digits',
-                          ),
+                      ),
+                      Text('\$${widget.totalAmount.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                NxCard(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        NxTextField(
+                          controller: _cardNumberController,
+                          label: 'Card number',
+                          hint: '1234 5678 9012 3456',
+                          prefixIcon: Icons.credit_card_rounded,
+                          keyboardType: TextInputType.number,
+                          maxLength: 19,
+                          onChanged: _formatCardNumber,
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Required';
+                            if (v.replaceAll(RegExp(r'\s'), '').length != 16) return 'Enter all 16 digits';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: NxTextField(
+                                controller: _expiryController,
+                                label: 'Expiry',
+                                hint: 'MM/YY',
+                                keyboardType: TextInputType.number,
+                                maxLength: 5,
+                                onChanged: _formatExpiry,
+                                validator: (v) => v == null || v.isEmpty ? 'Required' : RegExp(r'^(0[1-9]|1[0-2])\/([0-9]{2})$').hasMatch(v) ? null : 'Use MM/YY',
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: NxTextField(
+                                controller: _cvvController,
+                                label: 'CVV2',
+                                hint: '123',
+                                obscure: true,
+                                keyboardType: TextInputType.number,
+                                maxLength: 3,
+                                suffix: const Icon(Icons.shield_outlined, size: 20),
+                                validator: (v) => v == null || v.isEmpty ? 'Required' : v.length == 3 ? null : '3 digits',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        NxTextField(
+                          controller: _dynamicPasswordController,
+                          label: 'Dynamic password (OTP)',
+                          hint: '4-6 digits',
+                          obscure: true,
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                          prefixIcon: Icons.password_rounded,
+                          validator: (v) => v == null || v.isEmpty ? 'Required' : (v.length >= 4 && v.length <= 6) ? null : '4-6 digits',
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _dynamicPasswordController,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      obscureText: true,
-                      decoration: const InputDecoration(labelText: 'Dynamic Password (OTP)', hintText: '4-6 digits'),
-                      validator: (v) => v == null || v.isEmpty ? 'Required' : (v.length >= 4 && v.length <= 6) ? null : '4-6 digits',
-                    ),
-                    const SizedBox(height: 32),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _isProcessing ? null : _processPayment,
-                        icon: _isProcessing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.lock_open),
-                        label: Text(_isProcessing ? 'Processing...' : 'Pay Now'),
-                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  height: 52,
+                  child: NxButton(
+                    label: _isProcessing ? 'Processing…' : 'Pay now',
+                    icon: Icons.lock_open_rounded,
+                    onPressed: _isProcessing ? null : _processPayment,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'This is a demo checkout — no real charge is made.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: palette.textMuted),
+                ),
+              ],
             ),
           ),
         ),

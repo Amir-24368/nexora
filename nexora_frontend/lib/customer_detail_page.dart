@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'models/customer.dart';
 import 'models/sale.dart';
 import 'services/api_service.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 class CustomerDetailPage extends StatefulWidget {
   final Customer customer;
@@ -30,110 +32,140 @@ class _CustomerDetailPageState extends State<CustomerDetailPage> {
       });
     } catch (e) {
       setState(() => loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load orders: $e')));
+      if (mounted) nxSnack(context, 'Failed to load orders: $e', isError: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final palette = nxOf(context);
+    final c = widget.customer;
     final totalOrders = sales.length;
-    final avgOrder = totalOrders > 0 ? widget.customer.totalSpent / totalOrders : 0;
+    final avgOrder = totalOrders > 0 ? c.totalSpent / totalOrders : 0;
+    final completedOrders = sales.where((s) => s.status == 'COMPLETED').length;
 
     return Scaffold(
+      backgroundColor: palette.background,
       appBar: AppBar(
-        title: Text('${widget.customer.fullName} Details'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        backgroundColor: Colors.transparent,
+        leading: const NxBackButton(),
+        title: Text(c.fullName),
       ),
       body: loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const NxLoader(label: 'Loading profile...')
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(
-                    child: Column(
+                  // Hero card with avatar + contact.
+                  NxCard(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
                       children: [
-                        const CircleAvatar(
-                          radius: 50,
-                          child: Icon(Icons.person, size: 50),
+                        Container(
+                          width: 64,
+                          height: 64,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: nxHeroGradient),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            c.fullName.trim().isNotEmpty
+                                ? c.fullName.trim().split(RegExp(r'\s+')).take(2).map((w) => w[0].toUpperCase()).join()
+                                : '?',
+                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800),
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          widget.customer.fullName,
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          widget.customer.email ?? 'No email',
-                          style: const TextStyle(fontSize: 16, color: Colors.grey),
-                        ),
-                        Text(
-                          'Phone: ${widget.customer.phone}',
-                          style: const TextStyle(fontSize: 16),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(c.fullName, style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: palette.textPrimary)),
+                              const SizedBox(height: 2),
+                              Text(c.email ?? 'No email', style: TextStyle(fontSize: 13, color: palette.textMuted)),
+                              const SizedBox(height: 2),
+                              Text('Phone: ${c.phone.isNotEmpty ? c.phone : '-'}', style: TextStyle(fontSize: 13, color: palette.textMuted)),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 14),
                   Row(
                     children: [
-                      Expanded(child: _buildStatCard('Total Spent', '\$${widget.customer.totalSpent.toStringAsFixed(2)}', Colors.green)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildStatCard('Total Orders', totalOrders.toString(), Colors.blue)),
+                      Expanded(child: _Stat(label: 'Total spent', value: '\$${c.totalSpent.toStringAsFixed(2)}', color: palette.success)),
+                      const SizedBox(width: 10),
+                      Expanded(child: _Stat(label: 'Total orders', value: totalOrders.toString(), color: palette.info)),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
-                      Expanded(child: _buildStatCard('Average Order', '\$${avgOrder.toStringAsFixed(2)}', Colors.orange)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildStatCard('Member Since', widget.customer.createdAt.toLocal().toString().split(' ')[0], Colors.purple)),
+                      Expanded(child: _Stat(label: 'Average order', value: '\$${avgOrder.toStringAsFixed(2)}', color: palette.warning)),
+                      const SizedBox(width: 10),
+                      Expanded(child: _Stat(label: 'Completed', value: completedOrders.toString(), color: palette.primary)),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  const Text('Order History', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  sales.isEmpty
-                      ? const Center(child: Text('No orders yet'))
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: sales.length,
-                          itemBuilder: (_, i) {
-                            final sale = sales[i];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                leading: const Icon(Icons.shopping_bag),
-                                title: Text('Order #${sale.id}'),
-                                subtitle: Text('Total: \$${sale.totalAmount} | Date: ${sale.saleDate.toLocal().toString().split(' ')[0]}'),
-                                trailing: Text(sale.status),
+                  const SizedBox(height: 22),
+                  NxSectionHeader(title: 'Order history', subtitle: '${sales.length} order(s) on record'),
+                  if (sales.isEmpty)
+                    const NxEmptyState(icon: Icons.receipt_long_outlined, title: 'No orders yet', message: 'Orders this customer places will show up here.')
+                  else
+                    ...sales.map((s) => NxCard(
+                          padding: const EdgeInsets.all(14),
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            children: [
+                              const NxIconBlock(icon: Icons.shopping_bag_rounded, color: Color(0xFF7C3AED), size: 44),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Order #${s.id}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                                    const SizedBox(height: 2),
+                                    Text('${_date(s.saleDate)} · ${s.items.length} item(s)', style: TextStyle(fontSize: 12.5, color: palette.textMuted)),
+                                  ],
+                                ),
                               ),
-                            );
-                          },
-                        ),
+                              NxBadge(text: s.status, variant: nxStatusVariant(s.status)),
+                              const SizedBox(width: 10),
+                              Text('\$${s.totalAmount.toStringAsFixed(2)}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: palette.textPrimary)),
+                            ],
+                          ),
+                        )),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
     );
   }
 
-  Widget _buildStatCard(String title, String value, Color color) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Text(title, style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
-            const SizedBox(height: 4),
-            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-          ],
-        ),
+  String _date(DateTime d) => d.toLocal().toString().split(' ')[0];
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.value, required this.color});
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = nxOf(context);
+    return NxCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 1, color: palette.textMuted)),
+          const SizedBox(height: 6),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
+        ],
       ),
     );
   }

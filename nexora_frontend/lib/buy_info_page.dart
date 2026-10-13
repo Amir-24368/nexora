@@ -3,6 +3,8 @@ import 'services/api_service.dart';
 import 'models/purchase_order.dart';
 import 'models/product.dart';
 import 'models/shop.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 /// A restock line the user is composing before it becomes a purchase order.
 class _RestockItem {
@@ -36,6 +38,7 @@ class BuyInfoPage extends StatefulWidget {
 class _BuyInfoPageState extends State<BuyInfoPage> {
   // ---- loaded data ----
   bool _loading = true;
+  String _error = '';
   List<PurchaseOrder> _orders = [];
   List<Product> _products = [];
   Map<String, int> _stockByProduct = {};
@@ -124,27 +127,26 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
         _selectedShopId ??= shops.length == 1 ? shops.first.id : null;
         _stockByProduct = stock;
         _loading = false;
+        _error = '';
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loading = false);
-      _showError(e);
+      setState(() {
+        _loading = false;
+        _error = e.toString();
+      });
     }
   }
 
   void _showError(Object e) {
     if (!mounted) return;
     final message = e.toString().replaceFirst('Exception: ', '');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
+    nxSnack(this.context, message, isError: true);
   }
 
   void _showSuccess(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.green),
-    );
+    nxSnack(this.context, message);
   }
 
   // ==========================================================
@@ -247,6 +249,11 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
     }
   }
 
+  String _formatDate(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  String _money(double value) => '\$${value.toStringAsFixed(2)}';
+
   Future<void> _createPurchase() async {
     if (_selectedShopId == null) {
       _showError('Select which shop receives the stock');
@@ -302,10 +309,11 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
         _expectedDelivery = null;
         _creating = false;
       });
-      _showSuccess(
+      nxSnack(
+        context,
         _receiveNow
             ? 'Restock complete — ${order.totalReceived} units added to inventory'
-            : 'Purchase order #${order.id} saved as draft',
+            : 'Purchase order saved as draft',
       );
       await _loadData();
     } catch (e) {
@@ -321,7 +329,7 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
   Future<void> _approveOrder(PurchaseOrder order) async {
     try {
       await ApiService.approvePurchaseOrder(order.id);
-      _showSuccess('Purchase order #${order.id} approved');
+      _showSuccess('Purchase order approved');
       await _loadData();
     } catch (e) {
       _showError(e);
@@ -347,29 +355,17 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
   }
 
   Future<void> _cancelOrder(PurchaseOrder order) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Cancel purchase order #${order.id}?'),
-        content: const Text('The order will be marked as cancelled and can no longer be received.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Keep'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Cancel order'),
-          ),
-        ],
-      ),
+    final confirmed = await nxConfirm(
+      context,
+      title: 'Cancel purchase order?',
+      message: 'The order will be marked as cancelled and can no longer be received.',
+      confirmLabel: 'Cancel order',
+      variant: NxButtonVariant.danger,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     try {
       await ApiService.cancelPurchaseOrder(order.id);
-      _showSuccess('Purchase order #${order.id} cancelled');
+      _showSuccess('Purchase order cancelled');
       await _loadData();
     } catch (e) {
       _showError(e);
@@ -391,48 +387,42 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('New Supplier'),
-          content: SizedBox(
-            width: 380,
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: nameController,
-                    autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Supplier name *'),
-                    validator: (value) =>
-                        (value == null || value.trim().isEmpty) ? 'Name is required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: contactController,
-                    decoration: const InputDecoration(labelText: 'Contact person'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: phoneController,
-                    decoration: const InputDecoration(labelText: 'Phone'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: emailController,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                  ),
-                ],
-              ),
+        builder: (dialogContext, setDialogState) => nxDialog(
+          context: dialogContext,
+          title: 'New supplier',
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                NxTextField(
+                  controller: nameController,
+                  label: 'Supplier name *',
+                  autofocus: true,
+                  validator: (value) =>
+                      (value == null || value.trim().isEmpty) ? 'Name is required' : null,
+                ),
+                const SizedBox(height: 10),
+                NxTextField(controller: contactController, label: 'Contact person'),
+                const SizedBox(height: 10),
+                NxTextField(controller: phoneController, label: 'Phone'),
+                const SizedBox(height: 10),
+                NxTextField(
+                  controller: emailController,
+                  label: 'Email',
+                  keyboardType: TextInputType.emailAddress,
+                ),
+              ],
             ),
           ),
           actions: [
-            TextButton(
+            NxButton(
+              label: 'Cancel',
+              variant: NxButtonVariant.ghost,
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
             ),
-            ElevatedButton(
+            NxButton(
+              label: 'Save supplier',
               onPressed: saving
                   ? null
                   : () async {
@@ -457,13 +447,6 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
                         _showError(e);
                       }
                     },
-              child: saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Save'),
             ),
           ],
         ),
@@ -475,57 +458,43 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
   // BUILD
   // ==========================================================
 
-  String _money(double value) => '\$${value.toStringAsFixed(2)}';
-
-  String _formatDate(DateTime date) =>
-      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-
   @override
   Widget build(BuildContext context) {
+    final palette = nxOf(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: palette.background,
       appBar: AppBar(
-        title: const Text('Buy Information'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _loadData,
-          ),
-        ],
+        backgroundColor: Colors.transparent,
+        leading: const NxBackButton(),
+        title: const Text('Purchasing'),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = constraints.maxWidth >= 950;
-                if (wide) {
-                  return Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+          ? const NxLoader(label: 'Loading purchasing data…')
+          : _error.isNotEmpty && _orders.isEmpty && _products.isEmpty
+              ? NxErrorView(message: _error, onRetry: _loadData)
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final wide = constraints.maxWidth >= 950;
+                    if (wide) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 2, child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: _buildRestockForm())),
+                          Expanded(flex: 3, child: Padding(padding: const EdgeInsets.fromLTRB(0, 20, 20, 20), child: _buildOrdersList())),
+                        ],
+                      );
+                    }
+                    return ListView(
+                      padding: const EdgeInsets.all(16),
                       children: [
-                        Expanded(flex: 2, child: SingleChildScrollView(child: _buildRestockForm())),
-                        const SizedBox(width: 20),
-                        Expanded(flex: 3, child: _buildOrdersList()),
+                        _buildRestockForm(),
+                        const SizedBox(height: 20),
+                        SizedBox(height: 420, child: _buildOrdersList()),
                       ],
-                    ),
-                  );
-                }
-                return ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    _buildRestockForm(),
-                    const SizedBox(height: 20),
-                    SizedBox(height: 420, child: _buildOrdersList()),
-                  ],
-                );
-              },
-            ),
+                    );
+                  },
+                ),
     );
   }
 
@@ -534,264 +503,236 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
   // ----------------------------------------------------------
 
   Widget _buildRestockForm() {
+    final palette = nxOf(context);
     final selected = _selectedProduct;
     final stockKey = selected == null
         ? null
         : (_selectedShopId != null ? '${_selectedShopId}_${selected.id}' : selected.id);
     final currentStock = stockKey != null ? (_stockByProduct[stockKey] ?? 0) : 0;
 
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(Icons.add_business_outlined, color: Colors.purple),
+    return NxCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              NxIconBlock(icon: Icons.add_business_outlined, color: palette.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Restock store', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: palette.textPrimary)),
+                    Text('Buy stock from a supplier and add it to inventory', style: TextStyle(fontSize: 12.5, color: palette.textMuted)),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Restock Store', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                      Text(
-                        'Buy stock from a supplier and add it to inventory',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // ---- Receiving shop ----
+          DropdownButtonFormField<String>(
+            initialValue: _selectedShopId,
+            isExpanded: true,
+            decoration: _dd(label: 'Receiving shop *'),
+            hint: Text(_shops.isEmpty ? 'Loading shops…' : 'Which shop gets this stock?', style: TextStyle(color: palette.textMuted, fontSize: 14)),
+            items: _shops
+                .map((shop) => DropdownMenuItem<String>(
+                      value: shop.id,
+                      child: Text(shop.name, overflow: TextOverflow.ellipsis),
+                    ))
+                .toList(),
+            onChanged: _onShopSelected,
+          ),
+          const SizedBox(height: 16),
+
+          // ---- Supplier ----
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedSupplierId,
+                  isExpanded: true,
+                  decoration: _dd(label: 'Supplier *'),
+                  hint: Text(_suppliers.isEmpty ? 'No suppliers yet — add one' : 'Select supplier', style: TextStyle(color: palette.textMuted, fontSize: 14)),
+                  items: _suppliers
+                      .map((supplier) => DropdownMenuItem<String>(
+                            value: supplier['id']?.toString(),
+                            child: Text(supplier['name'] ?? 'Supplier', overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: (value) => setState(() => _selectedSupplierId = value),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: NxIconButton(icon: Icons.person_add_alt_rounded, tooltip: 'Add a new supplier', onTap: _showAddSupplierDialog),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // ---- Product ----
+          DropdownButtonFormField<String>(
+            initialValue: _selectedProductId,
+            isExpanded: true,
+            decoration: _dd(label: 'Product *'),
+            hint: Text(
+              _selectedShopId == null
+                  ? 'Pick a shop first'
+                  : _productsForShop.isEmpty
+                      ? 'No products in this shop yet'
+                      : 'Select product to restock',
+              style: TextStyle(color: palette.textMuted, fontSize: 14),
+            ),
+            items: _productsForShop
+                .map((product) => DropdownMenuItem<String>(
+                      value: product.id,
+                      child: Text(
+                        '${product.name}${product.sku.isNotEmpty ? ' · ${product.sku}' : ''}',
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // ---- Receiving shop ----
-            DropdownButtonFormField<String>(
-              value: _selectedShopId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Receiving shop *',
-                border: OutlineInputBorder(),
-              ),
-              hint: Text(_shops.isEmpty
-                  ? 'Loading shops…'
-                  : 'Which shop gets this stock?'),
-              items: _shops
-                  .map((shop) => DropdownMenuItem<String>(
-                        value: shop.id,
-                        child: Text(shop.name, overflow: TextOverflow.ellipsis),
-                      ))
-                  .toList(),
-              onChanged: _onShopSelected,
-            ),
-            const SizedBox(height: 16),
-
-            // ---- Supplier ----
+                    ))
+                .toList(),
+            onChanged: _onProductSelected,
+          ),
+          if (selected != null) ...[
+            const SizedBox(height: 6),
             Row(
               children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _selectedSupplierId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Supplier *',
-                      border: OutlineInputBorder(),
-                    ),
-                    hint: Text(_suppliers.isEmpty ? 'No suppliers yet — add one' : 'Select supplier'),
-                    items: _suppliers
-                        .map((supplier) => DropdownMenuItem<String>(
-                              value: supplier['id']?.toString(),
-                              child: Text(supplier['name'] ?? 'Supplier', overflow: TextOverflow.ellipsis),
-                            ))
-                        .toList(),
-                    onChanged: (value) => setState(() => _selectedSupplierId = value),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Tooltip(
-                  message: 'Add a new supplier',
-                  child: IconButton.filledTonal(
-                    onPressed: _showAddSupplierDialog,
-                    icon: const Icon(Icons.add),
-                  ),
+                Icon(Icons.inventory_2_outlined, size: 14, color: palette.textMuted),
+                const SizedBox(width: 4),
+                Text(
+                  'Current stock: $currentStock'
+                  '${_formQuantity > 0 ? '  →  after restock: ${currentStock + _formQuantity}' : ''}',
+                  style: TextStyle(fontSize: 12, color: palette.textMuted),
                 ),
               ],
-            ),
-            const SizedBox(height: 16),
-
-            // ---- Product ----
-            DropdownButtonFormField<String>(
-              value: _selectedProductId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Product *',
-                border: OutlineInputBorder(),
-              ),
-              hint: Text(
-                  _selectedShopId == null
-                      ? 'Pick a shop first'
-                      : _productsForShop.isEmpty
-                          ? 'No products in this shop yet'
-                          : 'Select product to restock'),
-              items: _productsForShop
-                  .map((product) => DropdownMenuItem<String>(
-                        value: product.id,
-                        child: Text(
-                          '${product.name}${product.sku.isNotEmpty ? ' · ${product.sku}' : ''}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ))
-                  .toList(),
-              onChanged: _onProductSelected,
-            ),
-            if (selected != null) ...[
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(Icons.inventory_2_outlined, size: 14, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Current stock: $currentStock'
-                    '${_formQuantity > 0 ? '  →  after restock: ${currentStock + _formQuantity}' : ''}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 16),
-
-            // ---- Quantity + unit cost ----
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _quantityController,
-                    decoration: const InputDecoration(
-                      labelText: 'Quantity *',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _costController,
-                    decoration: const InputDecoration(
-                      labelText: 'Unit cost *',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _addItem,
-                icon: const Icon(Icons.add),
-                label: const Text('Add product to purchase'),
-              ),
-            ),
-
-            // ---- Items list ----
-            if (_items.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 4),
-              const Text('Purchase items', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              ..._items.map(_buildItemRow),
-              const Divider(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Total', style: TextStyle(fontWeight: FontWeight.w600)),
-                  Text(
-                    _money(_orderTotal),
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green),
-                  ),
-                ],
-              ),
-            ],
-
-            const SizedBox(height: 16),
-
-            // ---- Optional details ----
-            InkWell(
-              onTap: _pickDeliveryDate,
-              borderRadius: BorderRadius.circular(8),
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Expected delivery (optional)',
-                  border: OutlineInputBorder(),
-                  suffixIcon: Icon(Icons.calendar_today_outlined, size: 18),
-                ),
-                child: Text(
-                  _expectedDelivery != null ? _formatDate(_expectedDelivery!) : 'Not set',
-                  style: TextStyle(color: _expectedDelivery != null ? Colors.black87 : Colors.grey),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _notesController,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Notes (optional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _receiveNow,
-              onChanged: (value) => setState(() => _receiveNow = value),
-              title: const Text('Receive stock now', style: TextStyle(fontSize: 14)),
-              subtitle: const Text(
-                'Adds the items to inventory immediately',
-                style: TextStyle(fontSize: 12),
-              ),
-            ),
-            const SizedBox(height: 4),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _creating ? null : _createPurchase,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purple,
-                  foregroundColor: Colors.white,
-                ),
-                icon: _creating
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.check_circle_outline),
-                label: Text(_receiveNow ? 'Buy & add to stock' : 'Create purchase order'),
-              ),
             ),
           ],
-        ),
+          const SizedBox(height: 16),
+
+          // ---- Quantity + unit cost ----
+          Row(
+            children: [
+              Expanded(
+                child: NxTextField(
+                  controller: _quantityController,
+                  label: 'Quantity *',
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: NxTextField(
+                  controller: _costController,
+                  label: 'Unit cost *',
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: NxButton(
+              label: 'Add product to purchase',
+              icon: Icons.add_rounded,
+              variant: NxButtonVariant.soft,
+              onPressed: _addItem,
+            ),
+          ),
+
+          // ---- Items list ----
+          if (_items.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Divider(color: palette.border, height: 1),
+            const SizedBox(height: 10),
+            Text('PURCHASE ITEMS', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 1.1, color: palette.textMuted)),
+            const SizedBox(height: 8),
+            ..._items.map(_buildItemRow),
+            const SizedBox(height: 6),
+            Divider(color: palette.border, height: 1),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Total', style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                Text(
+                  _money(_orderTotal),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: palette.success),
+                ),
+              ],
+            ),
+          ],
+
+          const SizedBox(height: 16),
+
+          // ---- Optional details ----
+          InkWell(
+            onTap: _pickDeliveryDate,
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+              decoration: BoxDecoration(color: palette.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: palette.border)),
+              child: Row(
+                children: [
+                  Icon(Icons.local_shipping_outlined, size: 18, color: palette.textMuted),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _expectedDelivery != null ? 'Expected delivery · ${_formatDate(_expectedDelivery!)}' : 'Expected delivery (optional)',
+                      style: TextStyle(fontSize: 14, color: _expectedDelivery != null ? palette.textPrimary : palette.textMuted, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          NxTextField(controller: _notesController, label: 'Notes (optional)', maxLines: 2),
+          NxSwitchRow(
+            title: 'Receive stock now',
+            subtitle: 'Adds the items to inventory immediately',
+            value: _receiveNow,
+            onToggle: (value) => setState(() => _receiveNow = value),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: double.infinity,
+            child: NxButton(
+              label: _receiveNow ? 'Buy & add to stock' : 'Create purchase order',
+              icon: Icons.check_circle_outline_rounded,
+              expanded: true,
+              onPressed: _creating ? null : _createPurchase,
+            ),
+          ),
+        ],
       ),
     );
   }
 
+  InputDecoration _dd({required String label}) {
+    final palette = nxOf(context);
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: palette.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.border)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.border)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.primary, width: 1.4)),
+      labelStyle: TextStyle(color: palette.textMuted, fontSize: 14),
+    );
+  }
+
   Widget _buildItemRow(_RestockItem item) {
+    final palette = nxOf(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -802,22 +743,20 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
               children: [
                 Text(
                   item.productName,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: palette.textPrimary),
                 ),
                 Text(
                   '${item.quantity} × ${_money(item.unitCost)}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: palette.textMuted),
                 ),
               ],
             ),
           ),
-          Text(_money(item.subtotal), style: const TextStyle(fontWeight: FontWeight.w600)),
-          IconButton(
-            icon: const Icon(Icons.close, size: 18),
-            tooltip: 'Remove',
-            onPressed: () => setState(() => _items.remove(item)),
-          ),
+          Text(_money(item.subtotal), style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
+          const SizedBox(width: 4),
+          NxIconButton(icon: Icons.close_rounded, tooltip: 'Remove', onTap: () => setState(() => _items.remove(item))),
         ],
       ),
     );
@@ -829,20 +768,14 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
 
   Widget _buildOrdersList() {
     if (_orders.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.receipt_long_outlined, size: 56, color: Colors.grey.shade400),
-            const SizedBox(height: 12),
-            Text('No purchase orders yet', style: TextStyle(fontSize: 16, color: Colors.grey.shade700)),
-            const SizedBox(height: 4),
-            Text('Create your first restock on the left', style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
-          ],
-        ),
+      return NxEmptyState(
+        icon: Icons.receipt_long_outlined,
+        title: 'No purchase orders yet',
+        message: 'Create your first restock to bring stock into inventory.',
       );
     }
     return ListView.builder(
+      padding: EdgeInsets.zero,
       itemCount: _orders.length,
       itemBuilder: (context, index) => _buildOrderCard(_orders[index]),
     );
@@ -857,97 +790,109 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
   }
 
   Widget _buildOrderCard(PurchaseOrder order) {
+    final palette = nxOf(context);
     final canApprove = order.status == 'DRAFT';
     final canReceive = order.status == 'APPROVED' ||
         order.status == 'ORDERED' ||
         order.status == 'PARTIALLY_RECEIVED';
     final canCancel = order.status != 'RECEIVED' && order.status != 'CANCELLED';
 
-    return Card(
-      elevation: 1,
+    return NxCard(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ExpansionTile(
-        shape: const Border(),
-        collapsedShape: const Border(),
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        title: Text(
-          order.supplierName.isEmpty ? 'Purchase order #${order.id}' : order.supplierName,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            'PO #${order.id}'
-            '${_shopName(order.shopId).isEmpty ? '' : ' · → ${_shopName(order.shopId)}'}'
-            ' · ${order.lines.length} product${order.lines.length == 1 ? '' : 's'}'
-            ' · ${_formatDate(order.createdAt)}',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+      padding: EdgeInsets.zero,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          shape: const Border(),
+          collapsedShape: const Border(),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          iconColor: palette.textMuted,
+          collapsedIconColor: palette.textMuted,
+          title: Text(
+            order.supplierName.isEmpty ? 'Purchase order' : order.supplierName,
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: palette.textPrimary),
           ),
-        ),
-        trailing: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '${_shopName(order.shopId).isEmpty ? '' : _shopName(order.shopId)}'
+              ' · ${order.lines.length} product${order.lines.length == 1 ? '' : 's'}'
+              ' · ${_formatDate(order.createdAt)}',
+              style: TextStyle(fontSize: 12, color: palette.textMuted),
+            ),
+          ),
+          trailing: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              NxBadge(text: _statusLabel(order.status), variant: nxStatusVariant(order.status)),
+              const SizedBox(height: 4),
+              Text(_money(order.total), style: TextStyle(fontWeight: FontWeight.w700, color: palette.textPrimary)),
+            ],
+          ),
           children: [
-            _statusChip(order.status),
-            const SizedBox(height: 4),
-            Text(_money(order.total), style: const TextStyle(fontWeight: FontWeight.w600)),
+            for (final line in order.lines) _buildLineRow(line),
+            if (order.lines.isNotEmpty &&
+                (order.status == 'PARTIALLY_RECEIVED' || order.status == 'RECEIVED')) ...[
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: order.totalOrdered == 0 ? 0 : order.totalReceived / order.totalOrdered,
+                backgroundColor: palette.surfaceAlt,
+                color: palette.success,
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ],
+            if (order.notes != null && order.notes!.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Notes: ${order.notes}',
+                  style: TextStyle(fontSize: 12, color: palette.textMuted),
+                ),
+              ),
+            ],
+            if (canApprove || canReceive || canCancel) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (canApprove)
+                    NxButton(label: 'Approve', variant: NxButtonVariant.soft, icon: Icons.thumb_up_outlined, onPressed: () => _approveOrder(order)),
+                  if (canApprove && canReceive) const SizedBox(width: 8),
+                  if (canReceive)
+                    NxButton(
+                      label: order.status == 'PARTIALLY_RECEIVED' ? 'Receive remaining' : 'Receive all',
+                      icon: Icons.move_to_inbox_outlined,
+                      onPressed: () => _receiveOrder(order),
+                    ),
+                  if (canReceive && canCancel) const SizedBox(width: 8),
+                  if (canCancel)
+                    NxButton(label: 'Cancel order', variant: NxButtonVariant.dangerSoft, onPressed: () => _cancelOrder(order)),
+                ],
+              ),
+            ],
           ],
         ),
-        children: [
-          for (final line in order.lines) _buildLineRow(line),
-          if (order.lines.isNotEmpty &&
-              (order.status == 'PARTIALLY_RECEIVED' || order.status == 'RECEIVED')) ...[
-            const SizedBox(height: 8),
-            LinearProgressIndicator(
-              value: order.totalOrdered == 0 ? 0 : order.totalReceived / order.totalOrdered,
-              backgroundColor: Colors.grey.shade200,
-              color: Colors.green,
-              minHeight: 6,
-            ),
-          ],
-          if (order.notes != null && order.notes!.trim().isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Notes: ${order.notes}',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-            ),
-          ],
-          if (canApprove || canReceive || canCancel) ...[
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (canApprove)
-                  TextButton.icon(
-                    onPressed: () => _approveOrder(order),
-                    icon: const Icon(Icons.thumb_up_outlined, size: 16),
-                    label: const Text('Approve'),
-                  ),
-                if (canReceive)
-                  FilledButton.icon(
-                    onPressed: () => _receiveOrder(order),
-                    icon: const Icon(Icons.move_to_inbox_outlined, size: 16),
-                    label: Text(order.status == 'PARTIALLY_RECEIVED' ? 'Receive remaining' : 'Receive all'),
-                  ),
-                if (canCancel)
-                  TextButton(
-                    onPressed: () => _cancelOrder(order),
-                    child: const Text('Cancel', style: TextStyle(color: Colors.redAccent)),
-                  ),
-              ],
-            ),
-          ],
-        ],
       ),
     );
   }
 
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'PARTIALLY_RECEIVED':
+        return 'Partial';
+      default:
+        // Title-case single-word statuses; multi-word stays as-is.
+        final lower = status.toLowerCase();
+        return lower[0].toUpperCase() + lower.substring(1);
+    }
+  }
+
   Widget _buildLineRow(PurchaseOrderLine line) {
+    final palette = nxOf(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -957,67 +902,18 @@ class _BuyInfoPageState extends State<BuyInfoPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  line.productName.isEmpty ? 'Product #${line.productId}' : line.productName,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  line.productName.isEmpty ? 'Product' : line.productName,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: palette.textPrimary),
                 ),
                 Text(
                   'Ordered ${line.orderedQuantity} · Received ${line.receivedQuantity} · ${_money(line.purchasePrice)}/unit',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 11, color: palette.textMuted),
                 ),
               ],
             ),
           ),
-          Text(_money(line.subtotal), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(_money(line.subtotal), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: palette.textPrimary)),
         ],
-      ),
-    );
-  }
-
-  Widget _statusChip(String status) {
-    late final Color color;
-    late final String label;
-    switch (status) {
-      case 'DRAFT':
-        color = Colors.grey;
-        label = 'Draft';
-        break;
-      case 'SUBMITTED':
-        color = Colors.amber.shade700;
-        label = 'Submitted';
-        break;
-      case 'APPROVED':
-        color = Colors.blue;
-        label = 'Approved';
-        break;
-      case 'ORDERED':
-        color = Colors.indigo;
-        label = 'Ordered';
-        break;
-      case 'PARTIALLY_RECEIVED':
-        color = Colors.orange;
-        label = 'Partial';
-        break;
-      case 'RECEIVED':
-        color = Colors.green;
-        label = 'Received';
-        break;
-      case 'CANCELLED':
-        color = Colors.redAccent;
-        label = 'Cancelled';
-        break;
-      default:
-        color = Colors.grey;
-        label = status;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
       ),
     );
   }

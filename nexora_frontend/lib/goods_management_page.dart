@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import 'dart:io';
 import 'services/api_service.dart';
-import 'logout_helper.dart';
 import 'models/product.dart';
 import 'models/category.dart';
 import 'models/shop.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 class GoodsManagementPage extends StatefulWidget {
   const GoodsManagementPage({super.key});
@@ -16,10 +15,12 @@ class GoodsManagementPage extends StatefulWidget {
 
 class _GoodsManagementPageState extends State<GoodsManagementPage> {
   List<Product> products = [];
+  List<Product> filteredProducts = [];
   List<Category> categories = [];
   List<Shop> shops = [];
   bool isLoading = true;
   String error = '';
+  final _searchController = TextEditingController();
 
   final _formKey = GlobalKey<FormState>();
 
@@ -50,7 +51,6 @@ class _GoodsManagementPageState extends State<GoodsManagementPage> {
   bool _trackInventory = true;
   bool _isActive = true;
   String? _editingProductId;
-  File? _selectedImage;
 
   static const List<String> _volumeOptions = [
     '100ml',
@@ -68,19 +68,51 @@ class _GoodsManagementPageState extends State<GoodsManagementPage> {
   void initState() {
     super.initState();
     _loadData();
+    _searchController.addListener(_filter);
   }
 
-  Future<void> _loadData() async {
-    setState(() => isLoading = true);
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _nameController.dispose();
+    _skuController.dispose();
+    _brandController.dispose();
+    _descriptionController.dispose();
+    _purchasePriceController.dispose();
+    _salePriceController.dispose();
+    _discountPercentageController.dispose();
+    _taxPercentageController.dispose();
+    _dateFromController.dispose();
+    _dateToController.dispose();
+    _weightController.dispose();
+    _lengthController.dispose();
+    _widthController.dispose();
+    _heightController.dispose();
+    _minStockController.dispose();
+    _maxStockController.dispose();
+    _reorderPointController.dispose();
+    super.dispose();
+  }
+
+  void _filter() {
+    final query = _searchController.text.toLowerCase().trim();
+    setState(() {
+      filteredProducts = products.where((p) {
+        if (query.isEmpty) return true;
+        return p.name.toLowerCase().contains(query) ||
+            p.sku.toLowerCase().contains(query) ||
+            (p.brand?.toLowerCase().contains(query) ?? false);
+      }).toList();
+    });
+  }
+
+  Future<void> _loadData({bool showSpinner = true}) async {
+    if (showSpinner) setState(() => isLoading = true);
     try {
       final prods = await ApiService.getProducts();
       final cats = await ApiService.getCategoriesTree();
       final shopsList = await ApiService.getShops();
-
-      print('✅ Loaded ${prods.length} products');
-      print('✅ Loaded ${cats.length} categories');
-      print('✅ Loaded ${shopsList.length} shops');
-
+      if (!mounted) return;
       setState(() {
         products = prods;
         categories = cats;
@@ -88,8 +120,9 @@ class _GoodsManagementPageState extends State<GoodsManagementPage> {
         isLoading = false;
         error = '';
       });
+      _filter();
     } catch (e) {
-      print('❌ Error loading data: $e');
+      if (!mounted) return;
       setState(() {
         error = e.toString();
         isLoading = false;
@@ -149,440 +182,231 @@ class _GoodsManagementPageState extends State<GoodsManagementPage> {
       _selectedStatus = 'ACTIVE';
       _trackInventory = true;
       _isActive = true;
-      _selectedImage = null;
     }
 
     showDialog(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setDialogState) {
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
           final flatCategories = _flattenCategoriesUnique(categories);
+          final palette = nxOf(dialogContext);
 
-          return AlertDialog(
-            title: Text(_editingProductId == null ? 'Add Product' : 'Edit Product'),
-            content: SingleChildScrollView(
+          Widget section(String title) => Padding(
+                padding: const EdgeInsets.only(top: 16, bottom: 8),
+                child: Row(
+                  children: [
+                    Container(width: 3, height: 14, decoration: BoxDecoration(color: palette.primary, borderRadius: BorderRadius.circular(2))),
+                    const SizedBox(width: 8),
+                    Text(title.toUpperCase(), style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 1.1, color: palette.textMuted)),
+                  ],
+                ),
+              );
+
+          return nxDialog(
+            context: dialogContext,
+            title: _editingProductId == null ? 'Add product' : 'Edit product',
+            content: SizedBox(
+              width: 520,
               child: Form(
                 key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Basic Information
-                    const Text('Basic Information', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Product Name *',
-                        hintText: 'e.g., Wireless Headphones',
-                        border: OutlineInputBorder(),
-                      ),
-                      maxLength: 255,
-                      validator: (v) => v!.trim().isEmpty ? 'Required' : null,
-                    ),
-                    TextFormField(
-                      controller: _skuController,
-                      decoration: const InputDecoration(
-                        labelText: 'SKU *',
-                        hintText: 'Unique identifier (e.g., WH-001)',
-                        border: OutlineInputBorder(),
-                      ),
-                      maxLength: 100,
-                      validator: (v) => v!.trim().isEmpty ? 'SKU is required' : null,
-                    ),
-                    TextFormField(
-                      controller: _brandController,
-                      decoration: const InputDecoration(
-                        labelText: 'Brand',
-                        hintText: 'e.g., Sony, Apple, Samsung',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    TextFormField(
-                      controller: _descriptionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Description',
-                        hintText: 'Product details...',
-                        border: OutlineInputBorder(),
-                      ),
-                      maxLines: 3,
-                      maxLength: 1000,
-                    ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      section('Basic information'),
+                      NxTextField(controller: _nameController, label: 'Product name *', hint: 'e.g., Wireless Headphones', maxLength: 255, validator: (v) => v!.trim().isEmpty ? 'Required' : null),
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        Expanded(child: NxTextField(controller: _skuController, label: 'SKU *', hint: 'Unique ID (e.g. WH-001)', maxLength: 100, validator: (v) => v!.trim().isEmpty ? 'SKU is required' : null)),
+                        const SizedBox(width: 10),
+                        Expanded(child: NxTextField(controller: _brandController, label: 'Brand', hint: 'e.g., Sony, Apple')),
+                      ]),
+                      const SizedBox(height: 10),
+                      NxTextField(controller: _descriptionController, label: 'Description', hint: 'Product details…', maxLines: 3, maxLength: 1000),
 
-                    const SizedBox(height: 16),
+                      section('Classification'),
+                      _categoryDropdown(setDialogState, flatCategories),
 
-                    // Classification
-                    const Text('Classification', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedCategoryId,
-                      hint: const Text('Category'),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('None')),
-                        ...flatCategories.map((cat) => DropdownMenuItem(
-                          value: cat.id,
-                          child: Text(cat.name),
-                        )),
-                      ],
-                      onChanged: (val) => setDialogState(() => _selectedCategoryId = val),
-                      decoration: const InputDecoration(
-                        labelText: 'Category',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
+                      section('Pricing'),
+                      Row(children: [
+                        Expanded(child: NxTextField(controller: _purchasePriceController, label: 'Purchase price *', keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) => v!.isEmpty ? 'Required' : null)),
+                        const SizedBox(width: 10),
+                        Expanded(child: NxTextField(controller: _salePriceController, label: 'Sale price *', keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) => v!.isEmpty ? 'Required' : null)),
+                      ]),
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        Expanded(child: NxTextField(controller: _discountPercentageController, label: 'Discount %', keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) {
+                          if (v == null || v.isEmpty) return null;
+                          final d = double.tryParse(v);
+                          if (d == null) return 'Enter a number';
+                          if (d < 0 || d > 100) return 'Must be 0-100';
+                          return null;
+                        })),
+                        const SizedBox(width: 10),
+                        Expanded(child: NxTextField(controller: _taxPercentageController, label: 'Tax %', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+                      ]),
 
-                    const SizedBox(height: 16),
+                      section('Volume & date'),
+                      Row(children: [
+                        Expanded(child: _volumeDropdown(setDialogState, value: _selectedVolumeFrom, label: 'Volume from', onChanged: (val) => setDialogState(() => _selectedVolumeFrom = val))),
+                        const SizedBox(width: 10),
+                        Expanded(child: _volumeDropdown(setDialogState, value: _selectedVolumeTo, label: 'Volume to', onChanged: (val) => setDialogState(() => _selectedVolumeTo = val))),
+                      ]),
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        Expanded(child: _dateField(setDialogState, controller: _dateFromController)),
+                        const SizedBox(width: 10),
+                        Expanded(child: _dateField(setDialogState, controller: _dateToController)),
+                      ]),
 
-                    // Pricing
-                    const Text('Pricing', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _purchasePriceController,
-                            decoration: const InputDecoration(
-                              labelText: 'Purchase Price *',
-                              prefixText: '\$ ',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            validator: (v) => v!.isEmpty ? 'Required' : null,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _salePriceController,
-                            decoration: const InputDecoration(
-                              labelText: 'Sale Price *',
-                              prefixText: '\$ ',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            validator: (v) => v!.isEmpty ? 'Required' : null,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _discountPercentageController,
-                            decoration: const InputDecoration(
-                              labelText: 'Discount %',
-                              suffixText: '%',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            validator: (v) {
-                              if (v == null || v.isEmpty) return null;
-                              final d = double.tryParse(v);
-                              if (d == null) return 'Enter a number';
-                              if (d < 0 || d > 100) return 'Must be between 0 and 100';
-                              return null;
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _taxPercentageController,
-                            decoration: const InputDecoration(
-                              labelText: 'Tax %',
-                              suffixText: '%',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          ),
-                        ),
-                      ],
-                    ),
+                      section('Source / shop'),
+                      _shopDropdown(setDialogState),
 
-                    const SizedBox(height: 16),
+                      section('Physical dimensions'),
+                      Row(children: [
+                        Expanded(child: NxTextField(controller: _weightController, label: 'Weight (kg)', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+                        const SizedBox(width: 10),
+                        Expanded(child: NxTextField(controller: _lengthController, label: 'Length (cm)', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+                      ]),
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        Expanded(child: NxTextField(controller: _widthController, label: 'Width (cm)', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+                        const SizedBox(width: 10),
+                        Expanded(child: NxTextField(controller: _heightController, label: 'Height (cm)', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+                      ]),
 
-                    // Volume & Date
-                    const Text('Volume & Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: _selectedVolumeFrom,
-                            hint: const Text('Volume From'),
-                            items: _volumeOptions.map((v) => DropdownMenuItem(
-                              value: v,
-                              child: Text(v),
-                            )).toList(),
-                            onChanged: (val) => setDialogState(() => _selectedVolumeFrom = val),
-                            decoration: const InputDecoration(
-                              labelText: 'Volume From',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: _selectedVolumeTo,
-                            hint: const Text('Volume To'),
-                            items: _volumeOptions.map((v) => DropdownMenuItem(
-                              value: v,
-                              child: Text(v),
-                            )).toList(),
-                            onChanged: (val) => setDialogState(() => _selectedVolumeTo = val),
-                            decoration: const InputDecoration(
-                              labelText: 'Volume To',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _dateFromController,
-                            readOnly: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Date From',
-                              hintText: 'Tap to select',
-                              border: OutlineInputBorder(),
-                              suffixIcon: Icon(Icons.calendar_today),
-                            ),
-                            onTap: () async {
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: DateTime.now(),
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime(2030),
-                              );
-                              if (date != null) {
-                                setDialogState(() {
-                                  _dateFromController.text = date.toIso8601String().split('T')[0];
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _dateToController,
-                            readOnly: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Date To',
-                              hintText: 'Tap to select',
-                              border: OutlineInputBorder(),
-                              suffixIcon: Icon(Icons.calendar_today),
-                            ),
-                            onTap: () async {
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: DateTime.now(),
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime(2030),
-                              );
-                              if (date != null) {
-                                setDialogState(() {
-                                  _dateToController.text = date.toIso8601String().split('T')[0];
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
+                      section('Inventory'),
+                      Row(children: [
+                        Expanded(child: NxTextField(controller: _minStockController, label: 'Min stock', keyboardType: TextInputType.number)),
+                        const SizedBox(width: 10),
+                        Expanded(child: NxTextField(controller: _maxStockController, label: 'Max stock', keyboardType: TextInputType.number)),
+                      ]),
+                      const SizedBox(height: 10),
+                      NxTextField(controller: _reorderPointController, label: 'Reorder point', hint: 'Stock level that triggers reorder', keyboardType: TextInputType.number),
 
-                    const SizedBox(height: 16),
-
-                    // Source / Shop
-                    const Text('Source / Shop', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedShopId,
-                      hint: const Text('Select Shop'),
-                      items: shops.map((shop) => DropdownMenuItem<String>(
-                        value: shop.id,
-                        child: Text(shop.name),
-                      )).toList(),
-                      onChanged: (val) => setDialogState(() => _selectedShopId = val),
-                      decoration: const InputDecoration(
-                        labelText: 'Source *',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (val) => val == null ? 'Please select a shop' : null,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Physical Dimensions
-                    const Text('Physical Dimensions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _weightController,
-                            decoration: const InputDecoration(
-                              labelText: 'Weight (kg)',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _lengthController,
-                            decoration: const InputDecoration(
-                              labelText: 'Length (cm)',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _widthController,
-                            decoration: const InputDecoration(
-                              labelText: 'Width (cm)',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _heightController,
-                            decoration: const InputDecoration(
-                              labelText: 'Height (cm)',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Inventory
-                    const Text('Inventory', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _minStockController,
-                            decoration: const InputDecoration(
-                              labelText: 'Min Stock',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _maxStockController,
-                            decoration: const InputDecoration(
-                              labelText: 'Max Stock',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                      ],
-                    ),
-                    TextFormField(
-                      controller: _reorderPointController,
-                      decoration: const InputDecoration(
-                        labelText: 'Reorder Point',
-                        hintText: 'Stock level that triggers reorder',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Status
-                    const Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedStatus,
-                      items: const [
-                        DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
-                        DropdownMenuItem(value: 'INACTIVE', child: Text('Inactive')),
-                        DropdownMenuItem(value: 'DISCONTINUED', child: Text('Discontinued')),
-                      ],
-                      onChanged: (val) => setDialogState(() => _selectedStatus = val!),
-                      decoration: const InputDecoration(
-                        labelText: 'Status',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    SwitchListTile(
-                      title: const Text('Track Inventory'),
-                      subtitle: const Text('Enable to track stock levels'),
-                      value: _trackInventory,
-                      onChanged: (val) => setDialogState(() => _trackInventory = val),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    SwitchListTile(
-                      title: const Text('Active'),
-                      subtitle: const Text('Product visible in store'),
-                      value: _isActive,
-                      onChanged: (val) => setDialogState(() => _isActive = val),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Image
-                    const Text('Image', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _selectedImage == null
-                              ? const Text('No image selected')
-                              : Text('Selected: ${_selectedImage!.path.split('/').last}'),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.image),
-                          onPressed: () async {
-                            final result = await FilePicker.platform.pickFiles(type: FileType.image);
-                            if (result != null && result.files.single.path != null) {
-                              setDialogState(() {
-                                _selectedImage = File(result.files.single.path!);
-                              });
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
+                      section('Status'),
+                      _statusDropdown(setDialogState),
+                      NxSwitchRow(title: 'Track inventory', subtitle: 'Enable to track stock levels', value: _trackInventory, onToggle: (v) => setDialogState(() => _trackInventory = v)),
+                      NxSwitchRow(title: 'Visible in store', subtitle: 'Product appears in the shopfront', value: _isActive, onToggle: (v) => setDialogState(() => _isActive = v)),
+                    ],
+                  ),
                 ),
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-              ElevatedButton(
-                onPressed: _saveProduct,
-                child: Text(_editingProductId == null ? 'Add' : 'Update'),
-              ),
+              NxButton(label: 'Cancel', variant: NxButtonVariant.ghost, onPressed: () => Navigator.pop(dialogContext)),
+              NxButton(label: _editingProductId == null ? 'Add' : 'Update', onPressed: _saveProduct),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _statusDropdown(StateSetter setDialogState) {
+    return DropdownButtonFormField<String>(
+      initialValue: _selectedStatus,
+      isExpanded: true,
+      items: const [
+        DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
+        DropdownMenuItem(value: 'INACTIVE', child: Text('Inactive')),
+        DropdownMenuItem(value: 'DISCONTINUED', child: Text('Discontinued')),
+      ],
+      onChanged: (val) => setDialogState(() => _selectedStatus = val ?? 'ACTIVE'),
+      decoration: _dropdownDecoration('Status'),
+    );
+  }
+
+  Widget _categoryDropdown(StateSetter setDialogState, List<Category> flatCategories) {
+    final palette = nxOf(context);
+    if (flatCategories.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: palette.surfaceAlt, borderRadius: BorderRadius.circular(14), border: Border.all(color: palette.border)),
+        child: Text('No categories yet — create one in Categories first', style: TextStyle(fontSize: 13, color: palette.textMuted)),
+      );
+    }
+    return DropdownButtonFormField<String>(
+      initialValue: _selectedCategoryId,
+      isExpanded: true,
+      items: [
+        const DropdownMenuItem<String>(value: null, child: Text('None')),
+        ...flatCategories.map((cat) => DropdownMenuItem(value: cat.id, child: Text(cat.name, overflow: TextOverflow.ellipsis))),
+      ],
+      onChanged: (val) => setDialogState(() => _selectedCategoryId = val),
+      decoration: _dropdownDecoration('Category'),
+    );
+  }
+
+  Widget _volumeDropdown(StateSetter setDialogState, {required String? value, required String label, required ValueChanged<String?> onChanged}) {
+    return DropdownButtonFormField<String>(
+      initialValue: value,
+      isExpanded: true,
+      items: _volumeOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+      onChanged: onChanged,
+      decoration: _dropdownDecoration(label),
+    );
+  }
+
+  Widget _shopDropdown(StateSetter setDialogState) {
+    return DropdownButtonFormField<String>(
+      initialValue: _selectedShopId,
+      isExpanded: true,
+      items: shops.map((shop) => DropdownMenuItem<String>(value: shop.id, child: Text(shop.name, overflow: TextOverflow.ellipsis))).toList(),
+      onChanged: (val) => setDialogState(() => _selectedShopId = val),
+      decoration: _dropdownDecoration('Source *'),
+      validator: (val) => val == null ? 'Please select a shop' : null,
+    );
+  }
+
+  InputDecoration _dropdownDecoration(String label) {
+    final palette = nxOf(context);
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: palette.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.border)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.border)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.primary, width: 1.4)),
+      labelStyle: TextStyle(color: palette.textMuted, fontSize: 14),
+    );
+  }
+
+  Widget _dateField(StateSetter setDialogState, {required TextEditingController controller}) {
+    final palette = nxOf(context);
+    final hasValue = controller.text.trim().isNotEmpty;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () async {
+        final date = await showDatePicker(
+          context: context,
+          initialDate: DateTime.now(),
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2030),
+        );
+        if (date != null) {
+          setDialogState(() => controller.text = date.toIso8601String().split('T')[0]);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        decoration: BoxDecoration(color: palette.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: palette.border)),
+        child: Row(
+          children: [
+            Icon(Icons.calendar_today_rounded, size: 18, color: palette.textMuted),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                hasValue ? controller.text : 'Tap to select',
+                style: TextStyle(fontSize: 14, color: hasValue ? palette.textPrimary : palette.textMuted.withOpacity(0.7), fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -592,8 +416,7 @@ class _GoodsManagementPageState extends State<GoodsManagementPage> {
     final ids = <String>{};
     void traverse(List<Category> nodes) {
       for (var cat in nodes) {
-        if (!ids.contains(cat.id)) {
-          ids.add(cat.id);
+        if (ids.add(cat.id)) {
           result.add(cat);
         }
         if (cat.children.isNotEmpty) {
@@ -641,24 +464,16 @@ class _GoodsManagementPageState extends State<GoodsManagementPage> {
         'track_inventory': _trackInventory,
       };
 
-      print('📦 Sending product data: $data');
-
       if (_editingProductId == null) {
         await ApiService.createProduct(data);
       } else {
         await ApiService.updateProduct(_editingProductId!, data);
       }
+      if (!mounted) return;
       Navigator.pop(context);
-      // Refresh the list
-      await _loadData();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_editingProductId == null ? 'Product added' : 'Product updated'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      await _loadData(showSpinner: false);
+      nxSnack(context, _editingProductId == null ? 'Product added' : 'Product updated');
     } catch (e) {
-      print('❌ Error saving product: $e');
       String errorMsg = e.toString().replaceFirst('Exception: ', '');
       if (errorMsg.startsWith('Network error: ')) {
         errorMsg = errorMsg.substring(14);
@@ -672,141 +487,231 @@ class _GoodsManagementPageState extends State<GoodsManagementPage> {
       } else if (errorMsg.contains('shop')) {
         errorMsg = 'Invalid shop selected.';
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMsg),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (!mounted) return;
+      nxSnack(context, errorMsg, isError: true);
     }
   }
 
-  Future<void> _deleteProduct(String id) async {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete Product'),
-        content: const Text('Are you sure?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              try {
-                await ApiService.deleteProduct(id);
-                Navigator.pop(context);
-                await _loadData();
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Delete failed: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+  Future<void> _deleteProduct(Product product) async {
+    final confirmed = await nxConfirm(
+      context,
+      title: 'Delete product',
+      message: 'Delete "${product.name}"? This cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: NxButtonVariant.danger,
+    );
+    if (!confirmed) return;
+    try {
+      await ApiService.deleteProduct(product.id);
+      await _loadData(showSpinner: false);
+      if (!mounted) return;
+      nxSnack(context, 'Product deleted');
+    } catch (e) {
+      if (!mounted) return;
+      nxSnack(context, 'Delete failed: $e', isError: true);
+    }
+  }
+
+  // =======================================================================
+  // BUILD
+  // =======================================================================
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = nxOf(context);
+    final list = filteredProducts;
+
+    return Scaffold(
+      backgroundColor: palette.background,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        leading: const NxBackButton(),
+        title: const Text('Goods Management'),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showProductDialog(),
+        backgroundColor: palette.primary,
+        foregroundColor: palette.textOnAccent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New product'),
+      ),
+      body: isLoading
+          ? const NxLoader(label: 'Loading products…')
+          : error.isNotEmpty
+              ? NxErrorView(message: error, onRetry: () => _loadData())
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                      child: NxTextField(controller: _searchController, hint: 'Search name, SKU or brand…', prefixIcon: Icons.search_rounded),
+                    ),
+                    Expanded(
+                      child: list.isEmpty
+                          ? NxEmptyState(
+                              icon: Icons.inventory_2_outlined,
+                              title: products.isEmpty ? 'No products yet' : 'No matches',
+                              message: products.isEmpty ? 'Add your first product to start selling.' : 'Try a different search term.',
+                              actionLabel: products.isEmpty ? 'New product' : null,
+                              onAction: products.isEmpty ? () => _showProductDialog() : null,
+                            )
+                          : RefreshIndicator(
+                              color: palette.primary,
+                              onRefresh: () => _loadData(showSpinner: false),
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final wide = constraints.maxWidth >= 760;
+                                  return ListView.builder(
+                                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
+                                    itemCount: list.length,
+                                    itemBuilder: (_, i) => wide ? _productRow(list[i]) : _productCard(list[i]),
+                                  );
+                                },
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+    );
+  }
+
+  Widget _productCard(Product p) {
+    final palette = nxOf(context);
+    final effective = p.effectivePrice;
+    final hasDiscount = p.discountPercentage != null && p.discountPercentage! > 0;
+    return NxCard(
+      margin: const EdgeInsets.only(bottom: 10),
+      onTap: () => _showProductDialog(product: p),
+      child: Row(
+        children: [
+          NxIconBlock(icon: Icons.inventory_2_outlined, color: palette.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                const SizedBox(height: 3),
+                Text('SKU ${p.sku} · ${p.brand ?? 'No brand'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: palette.textMuted)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    if (hasDiscount) ...[
+                      Text('\$${p.salePrice.toStringAsFixed(2)}', style: TextStyle(fontSize: 12.5, color: palette.textMuted, decoration: TextDecoration.lineThrough)),
+                      const SizedBox(width: 6),
+                    ],
+                    Text('\$${effective.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: palette.success)),
+                  ],
+                ),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
+          NxBadge(text: p.isActive ? p.status : 'Inactive', variant: nxStatusVariant(p.isActive ? p.status : 'inactive')),
+          const SizedBox(width: 4),
+          NxIconButton(icon: Icons.delete_outline_rounded, tooltip: 'Delete', color: palette.danger, onTap: () => _deleteProduct(p)),
         ],
       ),
     );
   }
 
+  Widget _productRow(Product p) {
+    final palette = nxOf(context);
+    return NxCard(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      onTap: () => _showProductDialog(product: p),
+      child: Row(
+        children: [
+          NxIconBlock(icon: Icons.inventory_2_outlined, color: palette.primary, size: 44),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                Text('SKU ${p.sku}  ·  ${p.shop?.name ?? 'No shop'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: palette.textMuted)),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              '${p.brand ?? '—'}  ·  Vol ${p.volumeFrom}${p.volumeTo.isNotEmpty && p.volumeTo != p.volumeFrom ? ' → ${p.volumeTo}' : ''}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, color: palette.textMuted),
+            ),
+          ),
+          SizedBox(
+            width: 170,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('\$${p.effectivePrice.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: palette.success)),
+                Text('Purchase \$${p.purchasePrice.toStringAsFixed(2)}  ·  Tax ${p.taxPercentage}%', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: palette.textMuted)),
+              ],
+            ),
+          ),
+          NxBadge(text: p.isActive ? p.status : 'Inactive', variant: nxStatusVariant(p.isActive ? p.status : 'inactive')),
+          const SizedBox(width: 10),
+          NxIconButton(icon: Icons.edit_outlined, tooltip: 'Edit', onTap: () => _showProductDialog(product: p)),
+          NxIconButton(icon: Icons.delete_outline_rounded, tooltip: 'Delete', color: palette.danger, onTap: () => _deleteProduct(p)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Theme-styled switch row used inside dialogs.
+class NxSwitchRow extends StatelessWidget {
+  const NxSwitchRow({super.key, required this.title, required this.subtitle, required this.value, required this.onToggle});
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onToggle;
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Goods Management'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-            tooltip: 'Refresh',
+    final palette = nxOf(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: palette.textPrimary)),
+                Text(subtitle, style: TextStyle(fontSize: 12, color: palette.textMuted)),
+              ],
+            ),
           ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showProductDialog(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (dialogContext) => AlertDialog(
-                  title: const Text('Logout'),
-                  content: const Text('Are you sure?'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(dialogContext); // close the dialog first
-                        performLogout(context);            // then logout with the page's own context
-                      },
-                      child: const Text('Logout'),
-                    ),
-                  ],
+          GestureDetector(
+            onTap: () => onToggle(!value),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 44,
+              height: 26,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: value ? palette.primary : palette.border,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 180),
+                alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                 ),
-              );
-            },
+              ),
+            ),
           ),
         ],
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : error.isNotEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('Error: $error'),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadData,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
-              : products.isEmpty
-                  ? const Center(child: Text('No products'))
-                  : ListView.builder(
-                      itemCount: products.length,
-                      itemBuilder: (_, i) {
-                        final p = products[i];
-                        return Card(
-                          margin: const EdgeInsets.all(8),
-                          child: ListTile(
-                            title: Text(p.name),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('SKU: ${p.sku}'),
-                                Text('Brand: ${p.brand ?? 'N/A'}'),
-                                Text('Price: \$${p.salePrice} | Active: ${p.isActive ? 'Yes' : 'No'}'),
-                                if (p.volumeFrom.isNotEmpty || p.volumeTo.isNotEmpty)
-                                  Text('Volume: ${p.volumeFrom} → ${p.volumeTo}'),
-                              ],
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit),
-                                  onPressed: () => _showProductDialog(product: p),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red),
-                                  onPressed: () => _deleteProduct(p.id),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
     );
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'models/goods_info_record.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 class GoodsInfoManagementPage extends StatefulWidget {
   const GoodsInfoManagementPage({super.key});
@@ -11,6 +13,8 @@ class GoodsInfoManagementPage extends StatefulWidget {
 
 class _GoodsInfoManagementPageState extends State<GoodsInfoManagementPage> {
   List<GoodsInfoRecord> records = [];
+  bool isLoading = true;
+  String error = '';
 
   final _formKey = GlobalKey<FormState>();
   final _forController = TextEditingController();
@@ -27,32 +31,30 @@ class _GoodsInfoManagementPageState extends State<GoodsInfoManagementPage> {
     _loadRecords();
   }
 
+  @override
+  void dispose() {
+    _forController.dispose();
+    _fromController.dispose();
+    _volumeBuyingController.dispose();
+    _volumeSellingController.dispose();
+    _priceController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadRecords() async {
     try {
       final data = await ApiService.getGoodsInfo();
+      if (!mounted) return;
       setState(() {
         records = data.map((json) => GoodsInfoRecord.fromJson(json)).toList();
+        isLoading = false;
+        error = '';
       });
     } catch (e) {
-      print('Error loading goods info: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to load records: $e'),
-        backgroundColor: Colors.red,
-      ));
-    }
-  }
-
-  Future<void> _selectDate(BuildContext context, bool isStart) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-    );
-    if (picked != null) {
+      if (!mounted) return;
       setState(() {
-        if (isStart) _startDate = picked;
-        else _endDate = picked;
+        error = e.toString();
+        isLoading = false;
       });
     }
   }
@@ -60,15 +62,11 @@ class _GoodsInfoManagementPageState extends State<GoodsInfoManagementPage> {
   Future<void> _addRecord() async {
     if (!_formKey.currentState!.validate()) return;
     if (_startDate == null || _endDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select both start and end dates'), backgroundColor: Colors.red),
-      );
+      nxSnack(context, 'Select both start and end dates', isError: true);
       return;
     }
     if (_endDate!.isBefore(_startDate!)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('End date must be after start date'), backgroundColor: Colors.red),
-      );
+      nxSnack(context, 'End date must be after start date', isError: true);
       return;
     }
 
@@ -88,26 +86,123 @@ class _GoodsInfoManagementPageState extends State<GoodsInfoManagementPage> {
 
     try {
       await ApiService.createGoodsInfo(recordData);
-      _loadRecords();
       _clearForm();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Record added'), backgroundColor: Colors.green),
-      );
+      await _loadRecords();
+      if (!mounted) return;
+      nxSnack(context, 'Record added');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to add record: $e'), backgroundColor: Colors.red),
-      );
+      if (!mounted) return;
+      nxSnack(context, 'Failed to add record: $e', isError: true);
     }
   }
 
-  Future<void> _deleteRecord(String id) async {
+  void _showAddDialog() {
+    _clearForm();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          String fmt(DateTime? d) => d == null ? 'Tap to select' : d.toLocal().toString().split(' ')[0];
+          return nxDialog(
+            context: dialogContext,
+            title: 'New goods info record',
+            content: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  NxTextField(controller: _forController, label: 'For (product)', validator: (v) => v!.isEmpty ? 'Required' : null),
+                  const SizedBox(height: 10),
+                  NxTextField(controller: _fromController, label: 'From (supplier)', validator: (v) => v!.isEmpty ? 'Required' : null),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () async {
+                            final picked = await showDatePicker(context: dialogContext, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2030));
+                            if (picked != null) setDialogState(() => _startDate = picked);
+                          },
+                          child: _dateBox(fmt(_startDate), 'Start date'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () async {
+                            final picked = await showDatePicker(context: dialogContext, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2030));
+                            if (picked != null) setDialogState(() => _endDate = picked);
+                          },
+                          child: _dateBox(fmt(_endDate), 'End date'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(child: NxTextField(controller: _volumeBuyingController, label: 'Volume buying', keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) => v == null || v.isEmpty ? 'Required' : (double.tryParse(v) == null ? 'Enter a valid number' : null))),
+                      const SizedBox(width: 10),
+                      Expanded(child: NxTextField(controller: _volumeSellingController, label: 'Volume selling', keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) => v == null || v.isEmpty ? 'Required' : (double.tryParse(v) == null ? 'Enter a valid number' : null))),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  NxTextField(controller: _priceController, label: 'Price', keyboardType: const TextInputType.numberWithOptions(decimal: true), validator: (v) => v == null || v.isEmpty ? 'Required' : (double.tryParse(v) == null ? 'Enter a valid number' : null)),
+                ],
+              ),
+            ),
+            actions: [
+              NxButton(label: 'Cancel', variant: NxButtonVariant.ghost, onPressed: () => Navigator.pop(dialogContext)),
+              NxButton(label: 'Add record', onPressed: _addRecord),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+
+  Widget _dateBox(String text, String fallback) {
+    final palette = nxOf(context);
+    final hasValue = text != fallback;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+      decoration: BoxDecoration(color: palette.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: palette.border)),
+      child: Row(
+        children: [
+          Icon(Icons.calendar_today_rounded, size: 17, color: palette.textMuted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 13.5, color: hasValue ? palette.textPrimary : palette.textMuted, fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteRecord(GoodsInfoRecord r) async {
+    final confirmed = await nxConfirm(
+      context,
+      title: 'Delete record',
+      message: 'Delete the bulk info for "${r.forField}" from "${r.fromField}"? This cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: NxButtonVariant.danger,
+    );
+    if (!confirmed) return;
     try {
-      await ApiService.deleteGoodsInfo(id);
-      _loadRecords();
+      await ApiService.deleteGoodsInfo(r.id);
+      await _loadRecords();
+      if (!mounted) return;
+      nxSnack(context, 'Record deleted');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: $e'), backgroundColor: Colors.red),
-      );
+      if (!mounted) return;
+      nxSnack(context, 'Delete failed: $e', isError: true);
     }
   }
 
@@ -123,131 +218,101 @@ class _GoodsInfoManagementPageState extends State<GoodsInfoManagementPage> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = nxOf(context);
+
+    if (isLoading) {
+      return const NxLoader();
+    }
+
+    if (error.isNotEmpty && records.isEmpty) {
+      return NxErrorView(message: error, onRetry: _loadRecords);
+    }
+
     return Scaffold(
+      backgroundColor: palette.background,
       appBar: AppBar(
-        title: const Text('Goods Information Management'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        backgroundColor: Colors.transparent,
+        leading: const NxBackButton(),
+        title: const Text('Goods Costs'),
       ),
-      body: Row(
-        children: [
-          Expanded(
-            flex: 1,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              color: Colors.grey.shade100,
-              child: Form(
-                key: _formKey,
-                child: ListView(
-                  children: [
-                    TextFormField(
-                      controller: _forController,
-                      decoration: const InputDecoration(labelText: 'For (Product)'),
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
-                    ),
-                    TextFormField(
-                      controller: _fromController,
-                      decoration: const InputDecoration(labelText: 'From (Supplier)'),
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextButton(
-                            onPressed: () => _selectDate(context, true),
-                            child: Text(_startDate == null
-                                ? 'Start Date'
-                                : 'Start: ${_startDate!.toLocal().toString().split(' ')[0]}'),
-                          ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddDialog,
+        backgroundColor: palette.primary,
+        foregroundColor: palette.textOnAccent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New record'),
+      ),
+      body: records.isEmpty
+          ? NxEmptyState(
+              icon: Icons.receipt_long_outlined,
+              title: 'No goods info records yet',
+              message: 'Use it to log bulk purchases: volume bought, volume sold and the price paid to a supplier.',
+              actionLabel: 'New record',
+              onAction: _showAddDialog,
+            )
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 900;
+                return ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 88),
+                  itemCount: records.length,
+                  itemBuilder: (context, i) {
+                    final r = records[i];
+                    if (wide) {
+                      return NxCard(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(r.forField, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                                Text('From ${r.fromField}', style: TextStyle(fontSize: 12, color: palette.textMuted)),
+                              ]),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text('${_fmt(r.startDate)}  →  ${_fmt(r.endDate)}', style: TextStyle(fontSize: 13, color: palette.textMuted)),
+                            ),
+                            SizedBox(
+                              width: 90,
+                              child: Text('${r.volumeBuying} buy · ${r.volumeSelling} sell', style: TextStyle(fontSize: 12.5, color: palette.textMuted)),
+                            ),
+                            SizedBox(
+                              width: 90,
+                              child: Text('\$${r.price.toStringAsFixed(2)}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: palette.success)),
+                            ),
+                            NxIconButton(icon: Icons.delete_outline_rounded, tooltip: 'Delete', color: palette.danger, onTap: () => _deleteRecord(r)),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextButton(
-                            onPressed: () => _selectDate(context, false),
-                            child: Text(_endDate == null
-                                ? 'End Date'
-                                : 'End: ${_endDate!.toLocal().toString().split(' ')[0]}'),
+                      );
+                    }
+                    return NxCard(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      onTap: () => _deleteRecord(r),
+                      child: Row(
+                        children: [
+                          NxIconBlock(icon: Icons.receipt_long_outlined, color: palette.info),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text('${r.forField} — ${_fmt(r.startDate)} → ${_fmt(r.endDate)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                              Text('From ${r.fromField} · Buy ${r.volumeBuying} · Sell ${r.volumeSelling}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: palette.textMuted)),
+                            ]),
                           ),
-                        ),
-                      ],
-                    ),
-                    TextFormField(
-                      controller: _volumeBuyingController,
-                      decoration: const InputDecoration(labelText: 'Volume Buying'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Required';
-                        if (double.tryParse(v) == null) return 'Enter a valid number';
-                        return null;
-                      },
-                    ),
-                    TextFormField(
-                      controller: _volumeSellingController,
-                      decoration: const InputDecoration(labelText: 'Volume Selling'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Required';
-                        if (double.tryParse(v) == null) return 'Enter a valid number';
-                        return null;
-                      },
-                    ),
-                    TextFormField(
-                      controller: _priceController,
-                      decoration: const InputDecoration(labelText: 'Price'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Required';
-                        if (double.tryParse(v) == null) return 'Enter a valid number';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: _addRecord,
-                      child: const Text('Add Record'),
-                    ),
-                  ],
-                ),
-              ),
+                          const SizedBox(width: 8),
+                          Text('\$${r.price.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.w800, color: palette.success)),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
             ),
-          ),
-          Expanded(
-            flex: 2,
-            child: records.isEmpty
-                ? const Center(child: Text('No records'))
-                : SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      columns: const [
-                        DataColumn(label: Text('For')),
-                        DataColumn(label: Text('From')),
-                        DataColumn(label: Text('Start')),
-                        DataColumn(label: Text('End')),
-                        DataColumn(label: Text('Buy Vol')),
-                        DataColumn(label: Text('Sell Vol')),
-                        DataColumn(label: Text('Price')),
-                        DataColumn(label: Text('Actions')),
-                      ],
-                      rows: records.map((r) => DataRow(cells: [
-                        DataCell(Text(r.forField)),
-                        DataCell(Text(r.fromField)),
-                        DataCell(Text(r.startDate.toLocal().toString().split(' ')[0])),
-                        DataCell(Text(r.endDate.toLocal().toString().split(' ')[0])),
-                        DataCell(Text(r.volumeBuying.toString())),
-                        DataCell(Text(r.volumeSelling.toString())),
-                        DataCell(Text('\$${r.price.toStringAsFixed(2)}')),
-                        DataCell(IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteRecord(r.id),
-                        )),
-                      ])).toList(),
-                    ),
-                  ),
-          ),
-        ],
-      ),
     );
   }
+
+  String _fmt(DateTime date) => date.toLocal().toString().split(' ')[0];
 }

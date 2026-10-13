@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   const ResetPasswordPage({super.key});
@@ -10,77 +12,83 @@ class ResetPasswordPage extends StatefulWidget {
 class _ResetPasswordPageState extends State<ResetPasswordPage> {
   final TextEditingController _emailController = TextEditingController();
 
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
   void _sendResetLink() {
-    String email = _emailController.text.trim();
-    if (email.isEmpty || !email.contains('@gmail.com')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid Gmail address')),
-      );
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      nxSnack(context, 'Please enter a valid email address', isError: true);
       return;
     }
 
     // Simulate sending reset link
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Reset link sent to $email (demo)'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    nxSnack(context, 'Reset link sent to $email (demo)');
 
     // Navigate back to login after 2 seconds
     Future.delayed(const Duration(seconds: 2), () {
-      Navigator.pop(context);
+      if (mounted) Navigator.pop(context);
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final palette = nxOf(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset Password')),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.email, size: 80, color: Colors.blue),
-            const SizedBox(height: 20),
-            const Text(
-              'Enter your Gmail address',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'We will send you a password reset link',
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 30),
-            TextField(
-              controller: _emailController,
-              decoration: InputDecoration(
-                labelText: 'Gmail address',
-                prefixIcon: const Icon(Icons.alternate_email),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      backgroundColor: palette.background,
+      appBar: AppBar(
+        leading: const NxBackButton(),
+        title: const Text('Reset password'),
+        backgroundColor: Colors.transparent,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: NxCard(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const NxIconBlock(icon: Icons.mark_email_read_rounded, color: Color(0xFF3B9DDB)),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Forgot your password?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: palette.textPrimary)),
+                            Text('We will send you a reset link', style: TextStyle(fontSize: 13, color: palette.textMuted)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  NxTextField(
+                    controller: _emailController,
+                    label: 'Email address',
+                    hint: 'you@gmail.com',
+                    prefixIcon: Icons.alternate_email_rounded,
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 24),
+                  NxButton(label: 'Send reset link', onPressed: _sendResetLink, height: 50, expanded: true),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Back to sign in', style: TextStyle(color: palette.primary, fontWeight: FontWeight.w600)),
+                  ),
+                ],
               ),
-              keyboardType: TextInputType.emailAddress,
             ),
-            const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _sendResetLink,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Send Reset Link'),
-              ),
-            ),
-            const SizedBox(height: 20),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Back to Login'),
-            ),
-          ],
+          ),
         ),
       ),
     );

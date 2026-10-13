@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'models/sale.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 class SaleInfoPage extends StatefulWidget {
   const SaleInfoPage({super.key});
@@ -38,138 +40,70 @@ class _SaleInfoPageState extends State<SaleInfoPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) return const Center(child: CircularProgressIndicator());
-    if (error.isNotEmpty) return Center(child: Text('Error: $error'));
-
-    final totalRevenue = sales.fold(0.0, (sum, s) => sum + s.totalAmount);
+    final palette = nxOf(context);
     final merged = _mergeByProduct(sales); // one entry per product
-
     return Scaffold(
+      backgroundColor: palette.background,
       appBar: AppBar(
-        title: const Text('Sale Information'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        backgroundColor: Colors.transparent,
+        leading: const NxBackButton(),
+        title: const Text('Sales'),
       ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildSummaryCard('Total Orders', sales.length.toString(), Colors.blue),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildSummaryCard('Total Revenue', '\$${totalRevenue.toStringAsFixed(2)}', Colors.green),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: sales.isEmpty
-                ? const Center(child: Text('No sales yet'))
-                : ListView.builder(
-                    itemCount: merged.length,
-                    itemBuilder: (_, i) {
-                      final p = merged[i];
-                      final isExpanded = _expandedKeys.contains(p.key);
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            children: [
-                              ListTile(
-                                onTap: () => setState(() {
-                                  isExpanded
-                                      ? _expandedKeys.remove(p.key)
-                                      : _expandedKeys.add(p.key);
-                                }),
-                            leading: Container(
-                              width: 50,
-                              height: 50,
-                              color: Colors.grey.shade200,
-                              child: const Icon(Icons.inventory_2),
+      body: isLoading
+          ? const NxLoader(label: 'Loading sales...')
+          : error.isNotEmpty
+              ? NxErrorView(message: error, onRetry: _loadSales)
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _StatCard(
+                              label: 'Total orders',
+                              value: sales.length.toString(),
+                              icon: Icons.receipt_long_rounded,
+                              color: palette.info,
                             ),
-                            title: Text(p.name,
-                                style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('${p.buyers.length} buyer(s) · ${p.units} unit(s) sold'),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Since ${p.firstSale != null ? p.firstSale!.toLocal().toString().split(' ')[0] : '-'}',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                ),
-                              ],
-                            ),
-                            trailing: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '\$${p.revenue.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                Text(
-                                  '${p.orders} order(s)',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                ),
-                              ],
-                            ),
-                              ),
-                              if (isExpanded)
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Divider(),
-                                      const Text('Purchase history',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.bold, fontSize: 13)),
-                                      const SizedBox(height: 4),
-                                      ...p.lines.map(
-                                        (l) => Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 2),
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  'Order #${l.orderId} · ${l.buyer} · ${l.date.toLocal().toString().split(' ')[0]}',
-                                                  style: const TextStyle(fontSize: 12),
-                                                ),
-                                              ),
-                                              Text(
-                                                '${l.qty} × ${l.price.toStringAsFixed(2)} = ${l.lineTotal.toStringAsFixed(2)}',
-                                                style: const TextStyle(
-                                                    fontSize: 12, fontWeight: FontWeight.w600),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
                           ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _StatCard(
+                              label: 'Total revenue',
+                              value: '\$${sales.fold(0.0, (sum, s) => sum + s.totalAmount).toStringAsFixed(2)}',
+                              icon: Icons.payments_rounded,
+                              color: palette.success,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: merged.isEmpty
+                          ? const NxEmptyState(
+                              icon: Icons.ssid_chart_rounded,
+                              title: 'No sales yet',
+                              message: 'Recorded sales will appear here as customers check out.',
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                              itemCount: merged.length,
+                              itemBuilder: (_, i) {
+                                final p = merged[i];
+                                final isExpanded = _expandedKeys.contains(p.key);
+                                return _ProductCard(
+                                  summary: p,
+                                  expanded: isExpanded,
+                                  onToggle: () => setState(() {
+                                    isExpanded ? _expandedKeys.remove(p.key) : _expandedKeys.add(p.key);
+                                  }),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
     );
   }
 
@@ -180,9 +114,7 @@ class _SaleInfoPageState extends State<SaleInfoPage> {
     final Map<String, _ProductSummary> byProduct = {};
     for (final sale in allSales) {
       final buyerKey = sale.customer != null
-          ? (sale.customer!.id.isNotEmpty
-              ? sale.customer!.id
-              : 'c:${sale.customer!.fullName}')
+          ? (sale.customer!.id.isNotEmpty ? sale.customer!.id : 'c:${sale.customer!.fullName}')
           : 'guest';
       for (final item in sale.items) {
         final key = item.product?.id ?? 'unknown:${item.id}';
@@ -210,34 +142,117 @@ class _SaleInfoPageState extends State<SaleInfoPage> {
     list.sort((a, b) => b.revenue.compareTo(a.revenue)); // best sellers first
     return list;
   }
+}
 
-  Widget _buildSummaryCard(String label, String value, Color color) {
-    return Card(
-      elevation: 2,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: color.withOpacity(0.1),
-        ),
-        child: Column(
-          children: [
-            Text(
-              label,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-              textAlign: TextAlign.center,
+class _StatCard extends StatelessWidget {
+  const _StatCard({required this.label, required this.value, required this.icon, required this.color});
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = nxOf(context);
+    return NxCard(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          NxIconBlock(icon: icon, color: color, size: 42),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: palette.textMuted)),
+                const SizedBox(height: 2),
+                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: palette.textPrimary)),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
+}
+
+class _ProductCard extends StatelessWidget {
+  const _ProductCard({required this.summary, required this.expanded, required this.onToggle});
+  final _ProductSummary summary;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = nxOf(context);
+    return NxCard(
+      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 10),
+      onTap: onToggle,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const NxIconBlock(icon: Icons.inventory_2_rounded, color: Color(0xFF7C3AED), size: 46),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(summary.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                    const SizedBox(height: 2),
+                    Text('${summary.buyers.length} buyer(s) · ${summary.units} unit(s) sold', style: TextStyle(fontSize: 12.5, color: palette.textMuted)),
+                    if (summary.firstSale != null) ...[
+                      const SizedBox(height: 2),
+                      Text('Since ${_date(summary.firstSale!)}', style: TextStyle(fontSize: 11.5, color: palette.textMuted)),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('\$${summary.revenue.toStringAsFixed(2)}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: palette.success)),
+                  Text('${summary.orders} order(s)', style: TextStyle(fontSize: 11.5, color: palette.textMuted)),
+                ],
+              ),
+              Icon(expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 20, color: palette.textMuted),
+            ],
+          ),
+          if (expanded) ...[
+            const SizedBox(height: 10),
+            Divider(color: palette.border, height: 1),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('PURCHASE HISTORY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1, color: palette.textMuted)),
+            ),
+            const SizedBox(height: 4),
+            ...summary.lines.map((l) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Order #${l.orderId} · ${l.buyer} · ${_date(l.date)}',
+                          style: TextStyle(fontSize: 12, color: palette.textMuted),
+                        ),
+                      ),
+                      Text(
+                        '${l.qty} × ${l.price.toStringAsFixed(2)} = ${l.lineTotal.toStringAsFixed(2)}',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: palette.textPrimary),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _date(DateTime d) => d.toLocal().toString().split(' ')[0];
 }
 
 class _ProductSummary {

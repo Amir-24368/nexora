@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 class UserProfilePage extends StatefulWidget {
   final String username;
@@ -17,6 +19,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+
+  final _formKey = GlobalKey<FormState>();
 
   String? _avatarUrl;
   bool _isLoading = true;
@@ -53,14 +57,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load profile: $e'), backgroundColor: Colors.red),
-      );
+      nxSnack(context, 'Failed to load profile: $e', isError: true);
     }
   }
 
   Future<void> _saveProfile() async {
     if (_isSaving) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _isSaving = true);
     try {
       await ApiService.updateProfile({
@@ -69,14 +72,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
         'phone': _phoneController.text.trim(),
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated'), backgroundColor: Colors.green),
-      );
+      nxSnack(context, 'Profile updated');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update: $e'), backgroundColor: Colors.red),
-      );
+      nxSnack(context, 'Failed to update: $e', isError: true);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -105,124 +104,140 @@ class _UserProfilePageState extends State<UserProfilePage> {
             : null;
         _isUploadingAvatar = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile picture updated'), backgroundColor: Colors.green),
-      );
+      nxSnack(context, 'Profile picture updated');
     } catch (e) {
       if (!mounted) return;
       setState(() => _isUploadingAvatar = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to upload picture: $e'), backgroundColor: Colors.red),
-      );
+      nxSnack(context, 'Failed to upload picture: $e', isError: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    final palette = nxOf(context);
+
+    if (_isLoading) return const NxLoader(label: 'Loading profile…');
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          // ---- Profile picture: tap to change ----
-          GestureDetector(
-            onTap: _changeAvatar,
-            child: Stack(
-              children: [
-                CircleAvatar(
-                  radius: 60,
-                  backgroundColor: Colors.grey.shade300,
-                  backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
-                  child: _avatarUrl == null
-                      ? const Icon(Icons.person, size: 60, color: Colors.grey)
-                      : null,
-                ),
-                if (_isUploadingAvatar)
-                  const Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.black38,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(child: CircularProgressIndicator(color: Colors.white)),
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 8),
+
+              // ---- Profile picture: tap to change ----
+              GestureDetector(
+                onTap: _changeAvatar,
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 56,
+                      backgroundColor: palette.primarySoft,
+                      backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+                      child: _avatarUrl == null
+                          ? Icon(Icons.person_rounded, size: 56, color: palette.textMuted)
+                          : null,
                     ),
-                  ),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    child: const Icon(Icons.camera_alt, size: 18, color: Colors.white),
+                    if (_isUploadingAvatar)
+                      const Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black38,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(child: SizedBox(width: 28, height: 28, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))),
+                        ),
+                      ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: palette.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: palette.surface, width: 2),
+                        ),
+                        child: const Icon(Icons.photo_camera_rounded, size: 17, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text('Tap the picture to change it', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: palette.textMuted)),
+              const SizedBox(height: 24),
+
+              NxCard(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                      NxTextField(
+                        controller: _nameController,
+                        label: 'Full name',
+                        prefixIcon: Icons.badge_outlined,
+                        validator: (v) => v!.trim().isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      NxTextField(
+                        controller: _usernameController,
+                        label: 'Username',
+                        prefixIcon: Icons.alternate_email_rounded,
+                      ),
+                      const SizedBox(height: 12),
+                      NxTextField(
+                        controller: _phoneController,
+                        label: 'Phone number',
+                        prefixIcon: Icons.phone_outlined,
+                        keyboardType: TextInputType.phone,
+                      ),
+                      const SizedBox(height: 12),
+                      NxTextField(
+                        controller: _emailController,
+                        label: 'Email',
+                        hint: 'Your Gmail login — cannot be changed here',
+                        prefixIcon: Icons.mail_outline_rounded,
+                        enabled: false,
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        child: NxButton(
+                          label: _isSaving ? 'Saving…' : 'Update profile',
+                          icon: Icons.save_outlined,
+                          onPressed: _isSaving ? null : _saveProfile,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text('Tap the picture to change it',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-          const SizedBox(height: 20),
+              ),
+              const SizedBox(height: 12),
 
-          // ---- Editable fields ----
-          TextField(
-            controller: _usernameController,
-            decoration: const InputDecoration(
-              labelText: 'Username',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.alternate_email),
-            ),
+              NxCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('APPEARANCE', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 1.1, color: palette.textMuted)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(child: Text('Dark mode', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: palette.textPrimary))),
+                        const NxThemeToggle(iconOnly: true),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(
-              labelText: 'Full Name',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.badge),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _phoneController,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Phone Number',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.phone),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _emailController,
-            readOnly: true,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              helperText: 'Your Gmail login - cannot be changed here',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.email),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: _isSaving ? null : _saveProfile,
-              icon: _isSaving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.save),
-              label: Text(_isSaving ? 'Saving...' : 'Update Profile'),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

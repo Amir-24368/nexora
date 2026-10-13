@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'models/category.dart';
+import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
 class CategoriesPage extends StatefulWidget {
   const CategoriesPage({super.key});
@@ -19,6 +21,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
   final _descriptionController = TextEditingController();
   String? _editingId;
   String? _selectedParentId;
+  final Set<String> _expanded = <String>{};
 
   @override
   void initState() {
@@ -26,14 +29,23 @@ class _CategoriesPageState extends State<CategoriesPage> {
     _loadCategories();
   }
 
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadCategories() async {
     try {
       final data = await ApiService.getCategoriesTree();
+      if (!mounted) return;
       setState(() {
         categories = data;
         isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         error = e.toString();
         isLoading = false;
@@ -48,55 +60,63 @@ class _CategoriesPageState extends State<CategoriesPage> {
     _selectedParentId = category?.parentId;
     showDialog(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final allCategories = _flattenCategories(categories);
-          return AlertDialog(
-            title: Text(_editingId == null ? 'Add Category' : 'Edit Category'),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final flat = _flattenCategories(categories);
+          return nxDialog(
+            context: dialogContext,
+            title: _editingId == null ? 'Add category' : 'Edit category',
             content: Form(
               key: _formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextFormField(
+                  NxTextField(
                     controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'Category Name'),
+                    label: 'Category name',
                     validator: (v) => v!.trim().isEmpty ? 'Required' : null,
                   ),
-                  TextFormField(
-                    controller: _descriptionController,
-                    decoration: const InputDecoration(labelText: 'Description (optional)'),
-                    maxLines: 2,
-                  ),
+                  const SizedBox(height: 12),
+                  NxTextField(controller: _descriptionController, label: 'Description (optional)', maxLines: 2),
+                  const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: _selectedParentId,
+                    initialValue: _selectedParentId,
+                    isExpanded: true,
                     hint: const Text('No parent (root)'),
                     items: [
-                      const DropdownMenuItem(value: null, child: Text('None (Root)')),
-                      ...allCategories.map((cat) {
+                      const DropdownMenuItem<String>(value: null, child: Text('None (root)')),
+                      ...flat.map((cat) {
                         if (_editingId != null && cat.id == _editingId) return null;
-                        return DropdownMenuItem(
-                          value: cat.id,
-                          child: Text(cat.name),
-                        );
+                        return DropdownMenuItem(value: cat.id, child: Text(cat.name, overflow: TextOverflow.ellipsis));
                       }).whereType<DropdownMenuItem<String>>(),
                     ],
                     onChanged: (val) => setDialogState(() => _selectedParentId = val),
-                    decoration: const InputDecoration(labelText: 'Parent Category'),
+                    decoration: _ddDecoration('Parent category'),
                   ),
                 ],
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-              ElevatedButton(
-                onPressed: _saveCategory,
-                child: Text(_editingId == null ? 'Add' : 'Update'),
-              ),
+              NxButton(label: 'Cancel', variant: NxButtonVariant.ghost, onPressed: () => Navigator.pop(dialogContext)),
+              NxButton(label: _editingId == null ? 'Add' : 'Update', onPressed: _saveCategory),
             ],
           );
         },
       ),
+    );
+  }
+
+  InputDecoration _ddDecoration(String label) {
+    final palette = nxOf(context);
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: palette.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.border)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.border)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: palette.primary, width: 1.4)),
+      labelStyle: TextStyle(color: palette.textMuted, fontSize: 14),
     );
   }
 
@@ -113,11 +133,10 @@ class _CategoriesPageState extends State<CategoriesPage> {
       } else {
         await ApiService.updateCategory(_editingId!, data);
       }
+      if (!mounted) return;
       Navigator.pop(context);
       _loadCategories();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Category saved'), backgroundColor: Colors.green),
-      );
+      nxSnack(context, 'Category saved');
     } catch (e) {
       String errorMsg = 'Failed to save category';
       final errorString = e.toString();
@@ -130,9 +149,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
       } else if (errorString.contains('shop')) {
         errorMsg = 'You must have a shop assigned to create categories.';
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
-      );
+      if (!mounted) return;
+      nxSnack(context, errorMsg, isError: true);
     }
   }
 
@@ -157,95 +175,121 @@ class _CategoriesPageState extends State<CategoriesPage> {
     return result;
   }
 
+  int _countAll(List<Category> nodes) {
+    var total = 0;
+    for (final n in nodes) {
+      total += 1 + _countAll(n.children);
+    }
+    return total;
+  }
+
   Widget _buildCategoryTree(List<Category> nodes, int depth) {
+    final palette = nxOf(context);
     return Column(
       children: nodes.map((cat) {
+        final hasChildren = cat.children.isNotEmpty;
+        final isExpanded = _expanded.contains(cat.id);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: EdgeInsets.only(left: depth * 20.0),
-              child: Card(
-                margin: const EdgeInsets.symmetric(vertical: 2),
-                child: ListTile(
-                  title: Text(cat.name),
-                  subtitle: cat.description != null && cat.description!.isNotEmpty
-                      ? Text(cat.description!)
-                      : null,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => _showDialog(category: cat),
+              padding: EdgeInsets.only(left: depth * 24.0),
+              child: NxCard(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Row(
+                  children: [
+                    if (hasChildren)
+                      NxIconButton(
+                        icon: isExpanded ? Icons.expand_more_rounded : Icons.chevron_right_rounded,
+                        tooltip: isExpanded ? 'Collapse' : 'Expand',
+                        onTap: () => setState(() => isExpanded ? _expanded.remove(cat.id) : _expanded.add(cat.id)),
+                      )
+                    else
+                      NxIconBlock(icon: Icons.label_outline_rounded, color: palette.warning, size: 40),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(cat.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: palette.textPrimary)),
+                          if (cat.description != null && cat.description!.isNotEmpty)
+                            Text(cat.description!, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: palette.textMuted)),
+                          if (hasChildren)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text('${_countAll([cat]) - 1} subcategor${_countAll([cat]) - 1 == 1 ? 'y' : 'ies'}', style: TextStyle(fontSize: 11.5, color: palette.textMuted)),
+                            ),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _deleteCategory(cat.id),
-                      ),
-                    ],
-                  ),
+                    ),
+                    NxIconButton(icon: Icons.edit_outlined, tooltip: 'Edit', onTap: () => _showDialog(category: cat)),
+                    NxIconButton(icon: Icons.delete_outline_rounded, tooltip: 'Delete', color: palette.danger, onTap: () => _deleteCategory(cat)),
+                  ],
                 ),
               ),
             ),
-            if (cat.children.isNotEmpty)
-              _buildCategoryTree(cat.children, depth + 1),
+            if (hasChildren && isExpanded) _buildCategoryTree(cat.children, depth + 1),
           ],
         );
       }).toList(),
     );
   }
 
-  Future<void> _deleteCategory(String id) async {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete Category'),
-        content: const Text('Are you sure? (Subcategories will be deleted too)'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              try {
-                await ApiService.deleteCategory(id);
-                Navigator.pop(context);
-                _loadCategories();
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
-                );
-              }
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+  Future<void> _deleteCategory(Category cat) async {
+    final confirmed = await nxConfirm(
+      context,
+      title: 'Delete category',
+      message: 'Delete "${cat.name}"? Subcategories will be deleted too.',
+      confirmLabel: 'Delete',
+      variant: NxButtonVariant.danger,
     );
+    if (!confirmed) return;
+    try {
+      await ApiService.deleteCategory(cat.id);
+      _loadCategories();
+      if (!mounted) return;
+      nxSnack(context, 'Category deleted');
+    } catch (e) {
+      if (!mounted) return;
+      nxSnack(context, 'Delete failed: $e', isError: true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final palette = nxOf(context);
+
     return Scaffold(
+      backgroundColor: palette.background,
       appBar: AppBar(
-        title: const Text('Category Management'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showDialog(),
-          ),
-        ],
+        backgroundColor: Colors.transparent,
+        leading: const NxBackButton(),
+        title: const Text('Categories'),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showDialog(),
+        backgroundColor: palette.primary,
+        foregroundColor: palette.textOnAccent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New category'),
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const NxLoader()
           : error.isNotEmpty
-              ? Center(child: Text('Error: $error'))
+              ? NxErrorView(message: error, onRetry: _loadCategories)
               : categories.isEmpty
-                  ? const Center(child: Text('No categories yet. Tap + to add.'))
+                  ? NxEmptyState(
+                      icon: Icons.label_outline_rounded,
+                      title: 'No categories yet',
+                      message: 'Organize your goods into categories to make browsing easier.',
+                      actionLabel: 'New category',
+                      onAction: () => _showDialog(),
+                    )
                   : SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 88),
                       child: _buildCategoryTree(categories, 0),
                     ),
     );
